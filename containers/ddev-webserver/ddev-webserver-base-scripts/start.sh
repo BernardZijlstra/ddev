@@ -38,6 +38,10 @@ if [ "$DDEV_PROJECT_TYPE" = "backdrop" ] ; then
     mkdir -p ~/.drush/commands && ln -s /var/tmp/backdrop_drush_commands ~/.drush/commands/backdrop
 fi
 
+if [ "${DDEV_PROJECT_TYPE}" = "drupal6" ] || [ "${DDEV_PROJECT_TYPE}" = "drupal7" ] ; then
+  ln -sf /usr/local/bin/drush8 /usr/local/bin/drush
+fi
+
 # Change the apache run user to current user/group
 printf "\nexport APACHE_RUN_USER=$(id -un)\nexport APACHE_RUN_GROUP=$(id -gn)\n" >>/etc/apache2/envvars
 
@@ -63,8 +67,6 @@ ls /var/www/html >/dev/null || (echo "/var/www/html does not seem to be healthy/
 # Along with ddev-live equivalent
 sudo mkdir -p ${TERMINUS_CACHE_DIR} /mnt/ddev-global-cache/ddev-live
 
-# /home/.* is a prototype for the created user's homedir; copy it in.
-sudo cp -r /home/{.ssh*,.drush,.gitconfig,.my.cnf} ~/
 sudo mkdir -p /mnt/ddev-global-cache/bashhistory/${HOSTNAME}
 sudo chown -R "$(id -u):$(id -g)" /mnt/ddev-global-cache/ ~/{.ssh*,.drush,.gitconfig,.my.cnf}
 

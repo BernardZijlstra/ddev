@@ -136,17 +136,20 @@ var (
 		},
 		// Note that testpkgmagento2 code is enormous and makes this really, really slow.
 		{
-			Name:                          "testpkgmagento2",
-			SourceURL:                     "https://github.com/drud/ddev_test_tarballs/releases/download/v1.1/magento2_code_no_dev_with_media.tgz",
+			Name: "testpkgmagento2",
+			// echo "This is a junk" >pub/junk.txt && tar -czf .tarballs/testpkgmagento2_code_no_media.magento2.4_try_4.tgz --exclude=.ddev --exclude=var --exclude=pub/media --exclude=.tarballs --exclude=app/etc/env.php .
+			SourceURL:                     "https://github.com/drud/ddev_test_tarballs/releases/download/v1.1/testpkgmagento2_code_no_media.magento2.4_try_4.tgz",
 			ArchiveInternalExtractionPath: "",
-			DBTarURL:                      "https://github.com/drud/ddev_test_tarballs/releases/download/v1.1/magento2_db.tgz",
-			FilesTarballURL:               "https://github.com/drud/ddev_test_tarballs/releases/download/v1.1/magento2_files.tgz",
-			FullSiteTarballURL:            "",
-			Docroot:                       "pub",
-			Type:                          nodeps.AppTypeMagento2,
-			Safe200URIWithExpectation:     testcommon.URIWithExpect{URI: "/junk.txt", Expect: `This is a junk`},
-			DynamicURI:                    testcommon.URIWithExpect{URI: "/index.php/junk-product.html", Expect: "junk product"},
-			FilesImageURI:                 "/media/catalog/product/r/a/randy_4th_of_july_unicycle.jpg",
+			// ddev export-db --gzip=false --file=.tarballs/db.sql && tar -czf .tarballs/testpkgmagento2.magento2.4.db_try_4.tgz -C .tarballs db.sql
+			DBTarURL: "https://github.com/drud/ddev_test_tarballs/releases/download/v1.1/testpkgmagento2.magento2.4.db_try_4.tgz",
+			// tar -czf .tarballs/testpkgmagento2_files.magento2.4_try_4.tgz -C pub/media .
+			FilesTarballURL:           "https://github.com/drud/ddev_test_tarballs/releases/download/v1.1/testpkgmagento2_files.magento2.4_try_4.tgz",
+			FullSiteTarballURL:        "",
+			Docroot:                   "pub",
+			Type:                      nodeps.AppTypeMagento2,
+			Safe200URIWithExpectation: testcommon.URIWithExpect{URI: "/junk.txt", Expect: `This is a junk`},
+			DynamicURI:                testcommon.URIWithExpect{URI: "/index.php/unicycle.html", Expect: "Unicycle"},
+			FilesImageURI:             "/media/catalog/product/r/a/randy_4th_of_july_unicycle.jpg",
 		},
 		{
 			Name:                          "TestPkgDrupal9",
@@ -177,6 +180,19 @@ var (
 			Safe200URIWithExpectation:     testcommon.URIWithExpect{URI: "/", Expect: "Laravel Components"},
 			DynamicURI:                    testcommon.URIWithExpect{URI: "/api/status-code/200", Expect: "indicates that the request has succeeded."},
 			FilesImageURI:                 "/images/200.jpg",
+		},
+		{
+			Name:                          "testpkgshopware6",
+			SourceURL:                     "https://github.com/drud/ddev_test_tarballs/releases/download/v1.1/shopware6_code.tgz",
+			ArchiveInternalExtractionPath: "",
+			FilesTarballURL:               "https://github.com/drud/ddev_test_tarballs/releases/download/v1.1/shopware6_files.tgz",
+			DBTarURL:                      "https://github.com/drud/ddev_test_tarballs/releases/download/v1.1/shopware6_db.tgz",
+			FullSiteTarballURL:            "",
+			Type:                          nodeps.AppTypeShopware6,
+			Docroot:                       "public",
+			Safe200URIWithExpectation:     testcommon.URIWithExpect{URI: "/maintenance.html", Expect: "Our website is currently undergoing maintenance"},
+			DynamicURI:                    testcommon.URIWithExpect{URI: "/Main-product-with-properties/SWDEMO10007.1", Expect: "Main product with properties"},
+			FilesImageURI:                 "/media/2f/b0/e2/1603218072/hemd_600x600.jpg",
 		},
 	}
 
@@ -235,7 +251,7 @@ func TestMain(m *testing.M) {
 	if token != "" {
 		// ddev auth ddev-live can create a .ddev folder, which we don't need right now,
 		// so drop it in /tmp
-		out, err := exec.RunCommand("bash", []string{"-c", "cd /tmp && ddev auth ddev-live " + token})
+		out, err := exec.RunCommand("bash", []string{"-c", fmt.Sprintf("cd /tmp && %s auth ddev-live %s", DdevBin, token)})
 		if err != nil {
 			log.Fatalf("Unable to ddev auth ddev-live: %v (%v)", err, out)
 		}
@@ -664,8 +680,15 @@ func TestDdevXdebugEnabled(t *testing.T) {
 
 	err := app.Init(site.Dir)
 	assert.NoError(err)
-	//nolint: errcheck
-	defer app.Stop(true, false)
+
+	t.Cleanup(func() {
+		app.XdebugEnabled = false
+		app.PHPVersion = nodeps.PHPDefault
+		err = app.WriteConfig()
+		assert.NoError(err)
+		err = app.Stop(true, false)
+		assert.NoError(err)
+	})
 
 	for _, v := range phpKeys {
 		app.PHPVersion = v
@@ -697,8 +720,18 @@ func TestDdevXdebugEnabled(t *testing.T) {
 			t.Errorf("Aborting xdebug check for php%s: %v", v, err)
 			continue
 		}
-		assert.Contains(stdout, "xdebug support => enabled", "xdebug not enabled for %s", v)
-		assert.Contains(stdout, "xdebug.remote_host => host.docker.internal => host.docker.internal")
+		// PHP 7.2 through 8.0 gets xdebug 3.0+
+		if app.PHPVersion == nodeps.PHP72 || app.PHPVersion == nodeps.PHP73 || app.PHPVersion == nodeps.PHP74 || app.PHPVersion == nodeps.PHP80 {
+			assert.Contains(stdout, "xdebug.mode => debug => debug", "xdebug is not enabled for %s", v)
+		} else {
+			assert.Contains(stdout, "xdebug support => enabled", "xdebug is not enabled for %s", v)
+		}
+
+		if app.PHPVersion == nodeps.PHP72 || app.PHPVersion == nodeps.PHP73 || app.PHPVersion == nodeps.PHP74 || app.PHPVersion == nodeps.PHP80 {
+			assert.Contains(stdout, "xdebug.client_host => host.docker.internal => host.docker.internal")
+		} else {
+			assert.Contains(stdout, "xdebug.remote_host => host.docker.internal => host.docker.internal")
+		}
 
 		// Start a listener on port 9000 of localhost (where PHPStorm or whatever would listen)
 		listener, err := net.Listen("tcp", ":9000")
@@ -796,7 +829,7 @@ func TestDdevMysqlWorks(t *testing.T) {
 func TestStartWithoutDdevConfig(t *testing.T) {
 	// Set up tests and give ourselves a working directory.
 	assert := asrt.New(t)
-	testDir := testcommon.CreateTmpDir("TestStartWithoutDdevConfig")
+	testDir := testcommon.CreateTmpDir(t.Name())
 
 	// testcommon.Chdir()() and CleanupDir() check their own errors (and exit)
 	defer testcommon.CleanupDir(testDir)
@@ -1038,9 +1071,13 @@ func TestDdevAllDatabases(t *testing.T) {
 	}
 	//Use a smaller list if GOTEST_SHORT
 	if os.Getenv("GOTEST_SHORT") != "" {
+		t.Log("Using limited set of database servers because GOTEST_SHORT is set")
 		dbVersions = map[string]map[string]bool{
-			"mariadb": {"10.2": true, "10.1": true},
-			"mysql":   {"8.0": true, "5.5": true},
+			"mariadb": {nodeps.MariaDB102: true, nodeps.MariaDB103: true},
+		}
+		// If we have any mysql, limit what we test (but there may not be any)
+		if len(dbVersions["mysql"]) != 0 {
+			dbVersions["mysql"] = map[string]bool{nodeps.MySQL80: true, nodeps.MySQL56: true}
 		}
 	}
 
@@ -1276,7 +1313,10 @@ func TestDdevFullSiteSetup(t *testing.T) {
 
 		settingsLocation, err := app.DetermineSettingsPathLocation()
 		assert.NoError(err)
-		assert.Equal(filepath.Dir(settingsLocation), filepath.Dir(app.SiteSettingsPath))
+
+		if app.Type != nodeps.AppTypeShopware6 {
+			assert.Equal(filepath.Dir(settingsLocation), filepath.Dir(app.SiteSettingsPath))
+		}
 		if nodeps.ArrayContainsString([]string{"drupal6", "drupal7"}, app.Type) {
 			assert.FileExists(filepath.Join(filepath.Dir(app.SiteSettingsPath), "drushrc.php"))
 		}
@@ -1330,7 +1370,101 @@ func TestDdevFullSiteSetup(t *testing.T) {
 	fmt.Print()
 }
 
-// TestDdevRestoreSnapshot tests creating a snapshot and reverting to it. This runs with Mariadb 10.2
+// TestDdevSnapshotCleanup tests creating a snapshot and deleting it.
+func TestDdevSnapshotCleanup(t *testing.T) {
+	assert := asrt.New(t)
+	app := &ddevapp.DdevApp{}
+	site := TestSites[0]
+	switchDir := site.Chdir()
+	defer switchDir()
+
+	runTime := util.TimeTrack(time.Now(), fmt.Sprintf("TestDdevSnapshotCleanup"))
+
+	testcommon.ClearDockerEnv()
+	err := app.Init(site.Dir)
+	assert.NoError(err)
+
+	err = app.StartAndWait(0)
+	assert.NoError(err)
+
+	// Make a snapshot of d7 tester test 1
+	backupsDir := filepath.Join(app.GetConfigPath(""), "db_snapshots")
+	snapshotName, err := app.Snapshot("d7testerTest1")
+	assert.NoError(err)
+
+	assert.True(fileutil.FileExists(filepath.Join(backupsDir, snapshotName, "xtrabackup_info")), "Expected that file xtrabackup_info in snapshot exists")
+
+	err = app.Init(site.Dir)
+	require.NoError(t, err)
+
+	err = app.Start()
+	require.NoError(t, err)
+	//nolint: errcheck
+	defer app.Stop(true, false)
+
+	err = app.DeleteSnapshot("d7testerTest1")
+	assert.NoError(err)
+
+	// Snapshot data should be deleted
+	assert.False(fileutil.FileExists(filepath.Join(backupsDir, snapshotName, "xtrabackup_info")), "Expected that file of snapshot is deleted during cleanup")
+
+	runTime()
+}
+
+// TestGetLatestSnapshot tests if the latest snapshot of a project is returned correctly.
+func TestGetLatestSnapshot(t *testing.T) {
+	assert := asrt.New(t)
+	app := &ddevapp.DdevApp{}
+	site := TestSites[0]
+	switchDir := site.Chdir()
+	defer switchDir()
+
+	runTime := util.TimeTrack(time.Now(), fmt.Sprintf("TestGetLatestSnapshot"))
+
+	testcommon.ClearDockerEnv()
+	err := app.Init(site.Dir)
+	assert.NoError(err)
+
+	err = app.StartAndWait(0)
+	assert.NoError(err)
+	//nolint: errcheck
+	defer app.Stop(true, false)
+
+	// Make three snapshots and compare the last
+	_, err = app.Snapshot("d7testerTest1")
+	assert.NoError(err)
+	_, err = app.Snapshot("d7testerTest2")
+	assert.NoError(err)
+	_, err = app.Snapshot("d7testerTest3") // last = latest
+	assert.NoError(err)
+
+	latestSnapshot, err := app.GetLatestSnapshot()
+	assert.NoError(err)
+	assert.Equal("d7testerTest3", latestSnapshot)
+
+	// delete last latest
+	err = app.DeleteSnapshot("d7testerTest3")
+	assert.NoError(err)
+	latestSnapshot, err = app.GetLatestSnapshot()
+	assert.NoError(err)
+	assert.Equal("d7testerTest2", latestSnapshot, "d7testerTest2 should be latest snapshot")
+
+	// cleanup snapshots
+	err = app.DeleteSnapshot("d7testerTest2")
+	assert.NoError(err)
+	latestSnapshot, err = app.GetLatestSnapshot()
+	assert.NoError(err)
+	assert.Equal("d7testerTest1", latestSnapshot, "d7testerTest1 should be latest snapshot")
+
+	err = app.DeleteSnapshot("d7testerTest1")
+	assert.NoError(err)
+	latestSnapshot, _ = app.GetLatestSnapshot()
+	assert.NotEqual("d7testerTest1", latestSnapshot)
+
+	runTime()
+}
+
+// TestDdevRestoreSnapshot tests creating a snapshot and reverting to it.
 func TestDdevRestoreSnapshot(t *testing.T) {
 	assert := asrt.New(t)
 	testDir, _ := os.Getwd()
@@ -1360,9 +1494,6 @@ func TestDdevRestoreSnapshot(t *testing.T) {
 	require.NoError(t, err)
 
 	app.Hooks = map[string][]ddevapp.YAMLTask{"post-snapshot": {{"exec-host": "touch hello-post-snapshot-" + app.Name}}, "pre-snapshot": {{"exec-host": "touch hello-pre-snapshot-" + app.Name}}}
-
-	// Try using php72 to avoid SIGBUS failures after restore.
-	app.PHPVersion = nodeps.PHP72
 
 	// First do regular start, which is good enough to get us to an ImportDB()
 	err = app.Start()
@@ -1404,6 +1535,10 @@ func TestDdevRestoreSnapshot(t *testing.T) {
 	assert.NoError(err)
 	err = os.Remove("hello-post-snapshot-" + app.Name)
 	assert.NoError(err)
+
+	// Make sure duplicate snapshot name gives an error
+	_, err = app.Snapshot(snapshotName)
+	assert.Error(err)
 
 	err = app.ImportDB(d7testerTest2Dump, "", false, false, "db")
 	assert.NoError(err, "Failed to app.ImportDB path: %s err: %v", d7testerTest2Dump, err)
@@ -1800,8 +1935,6 @@ func TestDdevExec(t *testing.T) {
 		case nodeps.AppTypeDrupal6:
 			fallthrough
 		case nodeps.AppTypeDrupal7:
-			fallthrough
-		case nodeps.AppTypeDrupal8:
 			out, _, err = app.Exec(&ddevapp.ExecOpts{
 				Service: "web",
 				Cmd:     "drush status",
@@ -1922,12 +2055,14 @@ func TestProcessHooks(t *testing.T) {
 	testcommon.ClearDockerEnv()
 	app, err := ddevapp.NewApp(site.Dir, true, nodeps.ProviderDefault)
 	assert.NoError(err)
-	defer func() {
-		_ = app.Stop(true, false)
+	t.Cleanup(func() {
+		err = app.Stop(true, false)
+		assert.NoError(err)
 		app.Hooks = nil
-		_ = app.WriteConfig()
+		err = app.WriteConfig()
+		assert.NoError(err)
 		switchDir()
-	}()
+	})
 	err = app.Start()
 	assert.NoError(err)
 
@@ -1964,8 +2099,26 @@ func TestProcessHooks(t *testing.T) {
 	assert.FileExists(filepath.Join(app.AppRoot, fmt.Sprintf("TestProcessHooks%s.txt", app.RouterHTTPSPort)))
 	assert.FileExists(filepath.Join(app.AppRoot, "touch_works_after_and.txt"))
 
-	err = app.Stop(true, false)
+	// Attempt processing hooks with a guaranteed failure
+	app.Hooks = map[string][]ddevapp.YAMLTask{
+		"hook-test": {
+			{"exec": "ls /does-not-exist"},
+		},
+	}
+	// With default setting, ProcessHooks should succeeed
+	err = app.ProcessHooks("hook-test")
 	assert.NoError(err)
+	// With FailOnHookFail or FailOnHookFailGlobal or both, it should fail.
+	app.FailOnHookFail = true
+	err = app.ProcessHooks("hook-test")
+	assert.Error(err)
+	app.FailOnHookFail = false
+	app.FailOnHookFailGlobal = true
+	err = app.ProcessHooks("hook-test")
+	assert.Error(err)
+	app.FailOnHookFail = true
+	err = app.ProcessHooks("hook-test")
+	assert.Error(err)
 
 	runTime()
 }
@@ -2798,7 +2951,8 @@ func TestInternalAndExternalAccessToURL(t *testing.T) {
 		for _, item := range URLList {
 			// Make sure internal (web container) access is successful
 			parts, err := url.Parse(item)
-			assert.NoError(err)
+			require.NoError(t, err, "url.Parse of item=%v failed", item)
+			require.NotNil(t, parts, "url.Parse of item=%v failed", item)
 			// Only try it if not an IP address URL; those won't be right
 			hostParts := strings.Split(parts.Host, ".")
 

@@ -6,7 +6,7 @@ Docker Desktop for Mac can be installed via Homebrew (`brew cask install docker`
 
 Docker Desktop for Windows can be downloaded via [Chocolatey](https://chocolatey.org/install) with `choco install docker-desktop` or it can be downloaded from [download.docker.com](https://download.docker.com/win/stable/Docker%20for%20Windows%20Installer.exe).
 
-## Linux Installation: Docker-ce
+## Linux Installation: Docker and docker-compose
 
 * __Please don't forget that Linux installation absolutely requires post-install steps (below).__
 
@@ -14,16 +14,16 @@ Docker Desktop for Windows can be downloaded via [Chocolatey](https://chocolatey
 
 * __Please don't use `sudo` with docker. If you're needing it, you haven't finished the installation. Don't use `sudo` with ddev, except the rare case where you need the `ddev hostname` command.__
 
-docker-ce installation on Linux depends on what flavor you're using. In all cases using the Ubuntu/Deb/yum repository is the preferred technique.
+Docker installation on Linux depends on what flavor you're using. Where possible the Ubuntu/Deb/yum repository is the preferred technique.
 
-* Ubuntu 20.04+ and Debian 10+ have recent enough versions that you can `sudo apt-get update && sudo apt-get install docker.io docker-compose`
+* Ubuntu 20.04+ has recent enough versions that you can `sudo apt-get update && sudo apt-get install docker.io docker-compose`
 * [Ubuntu before 20.04](https://docs.docker.com/install/linux/docker-ce/ubuntu/)
 * [CentOS](https://docs.docker.com/install/linux/docker-ce/centos/)
 * [Debian](https://docs.docker.com/install/linux/docker-ce/debian/)
-* [Fedora](https://docs.docker.com/install/linux/docker-ce/fedora/)
+* [Fedora](https://docs.docker.com/install/linux/docker-ce/fedora/). Recent versions of Fedora (32, 33+) require a [different approach, installing the original CGroups](https://fedoramagazine.org/docker-and-fedora-32/). In addition, you must [disable SELinux](https://www.cyberciti.biz/faq/disable-selinux-on-centos-7-rhel-7-fedora-linux/).
 * [binaries](https://docs.docker.com/install/linux/docker-ce/binaries/)
 
-After installing docker-ce you *must* install docker-compose separately except on Ubuntu 20.04+ and Debian 10+. If using Linuxbrew you can `brew install docker-compose`, otherwise [Follow download instructions](https://docs.docker.com/compose/install/#install-compose) (select "linux" tab). This really is just downloading docker-compose binary from <https://github.com/docker/compose/releases> and installing it in /usr/local/bin with executable permissions.
+After installing Docker you *must* install docker-compose separately except on Ubuntu 20.04+: If using Homebrew you can `brew install docker-compose`, otherwise [Follow download instructions](https://docs.docker.com/compose/install/#install-compose) (select "linux" tab). This really is just downloading docker-compose binary from <https://github.com/docker/compose/releases> and installing it in /usr/local/bin with executable permissions. On ARM64 computers you may have to install docker-compose using `pip install docker-compose` or `pip3 install docker-compose`.
 
 ### Linux Post-installation steps (required)
 

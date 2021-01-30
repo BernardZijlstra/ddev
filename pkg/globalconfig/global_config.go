@@ -12,8 +12,8 @@ import (
 	"net"
 	"os"
 	"os/exec"
-	"path"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -38,19 +38,24 @@ type ProjectInfo struct {
 
 // GlobalConfig is the struct defining ddev's global config
 type GlobalConfig struct {
-	OmitContainersGlobal     []string                `yaml:"omit_containers,flow"`
-	NFSMountEnabledGlobal    bool                    `yaml:"nfs_mount_enabled"`
-	InstrumentationOptIn     bool                    `yaml:"instrumentation_opt_in"`
-	RouterBindAllInterfaces  bool                    `yaml:"router_bind_all_interfaces"`
-	InternetDetectionTimeout int64                   `yaml:"internet_detection_timeout_ms"`
-	DeveloperMode            bool                    `yaml:"developer_mode,omitempty"`
-	InstrumentationUser      string                  `yaml:"instrumentation_user,omitempty"`
-	LastStartedVersion       string                  `yaml:"last_started_version"`
-	MkcertCARoot             string                  `yaml:"mkcert_caroot"`
-	UseLetsEncrypt           bool                    `yaml:"use_letsencrypt"`
-	LetsEncryptEmail         string                  `yaml:"letsencrypt_email"`
-	AutoRestartContainers    bool                    `yaml:"auto_restart_containers"`
-	ProjectList              map[string]*ProjectInfo `yaml:"project_info"`
+	OmitContainersGlobal     []string `yaml:"omit_containers,flow"`
+	NFSMountEnabledGlobal    bool     `yaml:"nfs_mount_enabled"`
+	InstrumentationOptIn     bool     `yaml:"instrumentation_opt_in"`
+	RouterBindAllInterfaces  bool     `yaml:"router_bind_all_interfaces"`
+	InternetDetectionTimeout int64    `yaml:"internet_detection_timeout_ms"`
+	DeveloperMode            bool     `yaml:"developer_mode,omitempty"`
+	InstrumentationUser      string   `yaml:"instrumentation_user,omitempty"`
+	LastStartedVersion       string   `yaml:"last_started_version"`
+	MkcertCARoot             string   `yaml:"mkcert_caroot"`
+	UseHardenedImages        bool     `yaml:"use_hardened_images"`
+	UseLetsEncrypt           bool     `yaml:"use_letsencrypt"`
+	LetsEncryptEmail         string   `yaml:"letsencrypt_email"`
+	AutoRestartContainers    bool     `yaml:"auto_restart_containers"`
+	FailOnHookFailGlobal     bool     `yaml:"fail_on_hook_fail"`
+	WebEnvironment           []string `yaml:"web_environment"`
+	HostDockerInternal       string   `yaml:"host_docker_internal"`
+
+	ProjectList map[string]*ProjectInfo `yaml:"project_info"`
 }
 
 // GetGlobalConfigPath() gets the path to global config file
@@ -118,6 +123,10 @@ func ReadGlobalConfig() error {
 	if DdevGlobalConfig.InternetDetectionTimeout < nodeps.InternetDetectionTimeoutDefault {
 		DdevGlobalConfig.InternetDetectionTimeout = nodeps.InternetDetectionTimeoutDefault
 	}
+	// Temporary workaround until Docker on m1 mac has host.docker.internal
+	if DdevGlobalConfig.HostDockerInternal == "" && runtime.GOOS == "darwin" && runtime.GOARCH == "arm64" {
+		DdevGlobalConfig.HostDockerInternal = "192.168.64.1"
+	}
 
 	err = ValidateGlobalConfig()
 	if err != nil {
@@ -148,11 +157,19 @@ func WriteGlobalConfig(config GlobalConfig) error {
 # You can enable nfs mounting for all projects with
 # nfs_mount_enabled: true
 #
+# You can inject environment variables into the web container with:
+# web_environment: 
+# - SOMEENV=somevalue
+# - SOMEOTHERENV=someothervalue
+
 # In unusual cases the default value to wait to detect internet availability is too short.
 # You can adjust this value higher to make it less likely that ddev will declare internet
 # unavailable, but ddev may wait longer on some commands. This should not be set below the default 750
 # ddev will ignore low values, as they're not useful
 # internet_detection_timeout_ms: 750
+
+# You can enable 'ddev start' to be interrupted by a failing hook with
+# fail_on_hook_fail: true
 
 # instrumentation_user: <your_username> # can be used to give ddev specific info about who you are
 # developer_mode: true # (defaults to false) is not used widely at this time.
@@ -163,6 +180,14 @@ func WriteGlobalConfig(config GlobalConfig) error {
 #    can be a major security issue, so choose wisely. Consider omit_containers[dba] to avoid
 #    exposing PHPMyAdmin.
 
+# use_hardened_images: false
+# With hardened images a container that is exposed to the internet is
+# a harder target, although not as hard as a fully-secured host.
+# sudo is removed, mailhog is removed, and since the web container
+# is run only as the owning user, only project files might be changed
+# if a CMS or PHP bug allowed creating or altering files, and
+# permissions should not allow escalation.
+
 # Let's Encrypt:
 # This integration is entirely experimental; your mileage may vary.
 # * Your host must be directly internet-connected.
@@ -172,8 +197,8 @@ func WriteGlobalConfig(config GlobalConfig) error {
 # * You will need to add a startup script to start your sites after a host reboot.
 # * If using several sites at a single top-level domain, you'll probably want to set
 #   project_tld to that top-level domain. Otherwise, you can use additional-hostnames or
-#   additional_fqdns. 
-# 
+#   additional_fqdns.
+#
 # use_letsencrypt: false
 # (Experimental, only useful on an internet-based server)
 # Set to true if certificates are to be obtained via certbot on https://letsencrypt.org/
@@ -185,6 +210,8 @@ func WriteGlobalConfig(config GlobalConfig) error {
 # Experimental
 # If true, attempt to automatically restart projects/containers after reboot or docker restart.
 
+# fail_on_hook_fail: false
+# Decide whether 'ddev start' should be interrupted by a failing hook
 
 `
 	cfgbytes = append(cfgbytes, instructions...)
@@ -203,7 +230,7 @@ func GetGlobalDdevDir() string {
 	if err != nil {
 		logrus.Fatal("could not get home directory for current user. is it set?")
 	}
-	ddevDir := path.Join(userHome, ".ddev")
+	ddevDir := filepath.Join(userHome, ".ddev")
 
 	// Create the directory if it is not already present.
 	if _, err := os.Stat(ddevDir); os.IsNotExist(err) {
@@ -446,10 +473,10 @@ func IsInternetActive() bool {
 	// Internet is active (active == true) if both err and ctx.Err() were nil
 	active := err == nil && ctx.Err() == nil
 	if os.Getenv("DDEV_DEBUG") != "" {
+		if active == false {
+			output.UserErr.Println("Internet connection not detected, DNS may not work, see https://ddev.readthedocs.io/en/stable/users/faq/ for info.")
+		}
 		output.UserErr.Printf("IsInternetActive DEBUG: err=%v ctx.Err()=%v addrs=%v IsInternetactive==%v, randomURL=%v internet_detection_timeout_ms=%dms\n", err, ctx.Err(), addrs, active, randomURL, DdevGlobalConfig.InternetDetectionTimeout)
-	}
-	if active == false {
-		output.UserErr.Println("Internet connection not detected, see https://ddev.readthedocs.io/en/stable/users/faq/ for info.")
 	}
 
 	// remember the result to not call this twice

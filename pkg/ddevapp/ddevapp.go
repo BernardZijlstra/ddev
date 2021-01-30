@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -76,10 +77,12 @@ type DdevApp struct {
 	NoProjectMount            bool                   `yaml:"no_project_mount,omitempty"`
 	AdditionalHostnames       []string               `yaml:"additional_hostnames"`
 	AdditionalFQDNs           []string               `yaml:"additional_fqdns"`
-	MariaDBVersion            string                 `yaml:"mariadb_version,omitempty"`
-	MySQLVersion              string                 `yaml:"mysql_version,omitempty"`
+	MariaDBVersion            string                 `yaml:"mariadb_version"`
+	MySQLVersion              string                 `yaml:"mysql_version"`
 	NFSMountEnabled           bool                   `yaml:"nfs_mount_enabled,omitempty"`
 	NFSMountEnabledGlobal     bool                   `yaml:"-"`
+	FailOnHookFail            bool                   `yaml:"fail_on_hook_fail,omitempty"`
+	FailOnHookFailGlobal      bool                   `yaml:"-"`
 	ConfigPath                string                 `yaml:"-"`
 	AppRoot                   string                 `yaml:"-"`
 	Platform                  string                 `yaml:"-"`
@@ -107,7 +110,9 @@ type DdevApp struct {
 	MkcertEnabled             bool                   `yaml:"-"`
 	NgrokArgs                 string                 `yaml:"ngrok_args,omitempty"`
 	Timezone                  string                 `yaml:"timezone,omitempty"`
+	ComposerVersion           string                 `yaml:"composer_version"`
 	DisableSettingsManagement bool                   `yaml:"disable_settings_management,omitempty"`
+	WebEnvironment            []string               `yaml:"web_environment"`
 	ComposeYaml               map[string]interface{} `yaml:"-"`
 }
 
@@ -230,6 +235,7 @@ func (app *DdevApp) Describe(short bool) (map[string]interface{}, error) {
 	appDesc["hostname"] = app.GetHostname()
 	appDesc["hostnames"] = app.GetHostnames()
 	appDesc["nfs_mount_enabled"] = (app.NFSMountEnabled || app.NFSMountEnabledGlobal)
+	appDesc["fail_on_hook_fail"] = (app.FailOnHookFail || app.FailOnHookFailGlobal)
 	httpURLs, httpsURLs, allURLs := app.GetAllURLs()
 	appDesc["httpURLs"] = httpURLs
 	appDesc["httpsURLs"] = httpsURLs
@@ -242,7 +248,7 @@ func (app *DdevApp) Describe(short bool) (map[string]interface{}, error) {
 		appDesc["database_type"] = "mariadb" // default
 		appDesc["mariadb_version"] = app.MariaDBVersion
 		if app.MariaDBVersion == "" {
-			appDesc["mariadb_version"] = version.MariaDBDefaultVersion
+			appDesc["mariadb_version"] = nodeps.MariaDBDefaultVersion
 		}
 	}
 
@@ -267,7 +273,7 @@ func (app *DdevApp) Describe(short bool) (map[string]interface{}, error) {
 				if app.MariaDBVersion != "" {
 					dbinfo["mariadb_version"] = app.MariaDBVersion
 				} else {
-					dbinfo["mariadb_version"] = version.MariaDBDefaultVersion
+					dbinfo["mariadb_version"] = nodeps.MariaDBDefaultVersion
 				}
 			}
 			appDesc["dbinfo"] = dbinfo
@@ -799,12 +805,24 @@ func (app *DdevApp) ProcessHooks(hookName string) error {
 			return fmt.Errorf("unable to create task from %v", c)
 		}
 
+		if hookName == "pre-start" {
+			for k := range c {
+				if k == "exec" || k == "composer" {
+					return fmt.Errorf("pre-start hooks cannot contain %v", k)
+				}
+			}
+		}
+
 		output.UserOut.Printf("=== Running task: %s, output below", a.GetDescription())
 
 		err := a.Execute()
 
 		if err != nil {
-			output.UserOut.Errorf("task failed: %v: %v", a.GetDescription(), err)
+			if app.FailOnHookFail || app.FailOnHookFailGlobal {
+				output.UserOut.Errorf("Task failed: %v: %v", a.GetDescription(), err)
+				return fmt.Errorf("Task failed: %v", err)
+			}
+			output.UserOut.Errorf("Task failed: %v: %v", a.GetDescription(), err)
 			output.UserOut.Warn("A task failure does not mean that ddev failed, but your hook configuration has a command that failed.")
 		}
 	}
@@ -1329,6 +1347,9 @@ func (app *DdevApp) DockerEnv() {
 	}
 
 	envVars := map[string]string{
+		// Without COMPOSE_DOCKER_CLI_BUILD=0, docker-cmpose makes all kinds of mess
+		// of output. BUILDKIT_PROGRESS doesn't help either.
+		"COMPOSE_DOCKER_CLI_BUILD":      "0",
 		"COMPOSE_PROJECT_NAME":          "ddev-" + app.Name,
 		"COMPOSE_CONVERT_WINDOWS_PATHS": "true",
 		"DDEV_SITENAME":                 app.Name,
@@ -1476,6 +1497,15 @@ func (app *DdevApp) Snapshot(snapshotName string) (string, error) {
 		t := time.Now()
 		snapshotName = app.Name + "_" + t.Format("20060102150405")
 	}
+
+	existingSnapshots, err := app.ListSnapshots()
+	if err != nil {
+		return "", err
+	}
+	if nodeps.ArrayContainsString(existingSnapshots, snapshotName) {
+		return "", fmt.Errorf("snapshot %s already exists, please use another snapshot name or clean up snapshots with `ddev snapshot --cleanup`", snapshotName)
+	}
+
 	// Container side has to use path.Join instead of filepath.Join because they are
 	// targeted at the linux filesystem, so won't work with filepath on Windows
 	snapshotDir := path.Join("db_snapshots", snapshotName)
@@ -1512,6 +1542,83 @@ func (app *DdevApp) Snapshot(snapshotName string) (string, error) {
 	return snapshotName, nil
 }
 
+// DeleteSnapshot removes the snapshot directory inside a project
+func (app *DdevApp) DeleteSnapshot(snapshotName string) error {
+	var err error
+	err = app.ProcessHooks("pre-delete-snapshot")
+	if err != nil {
+		return fmt.Errorf("Failed to process pre-delete-snapshot hooks: %v", err)
+	}
+
+	snapshotDir := path.Join("db_snapshots", snapshotName)
+	hostSnapshotDir := filepath.Join(filepath.Dir(app.ConfigPath), snapshotDir)
+
+	if err = fileutil.PurgeDirectory(hostSnapshotDir); err != nil {
+		return fmt.Errorf("Failed to purge contents of snapshot directory: %v", err)
+	}
+
+	if err = os.Remove(hostSnapshotDir); err != nil {
+		return fmt.Errorf("Failed to delete snapshot directory: %v", err)
+	}
+
+	util.Success("Deleted database snapshot %s in %s", snapshotName, hostSnapshotDir)
+	err = app.ProcessHooks("post-delete-snapshot")
+	if err != nil {
+		return fmt.Errorf("Failed to process post-delete-snapshot hooks: %v", err)
+	}
+
+	return nil
+
+}
+
+// GetLatestSnapshot returns the latest created snapshot of a project
+func (app *DdevApp) GetLatestSnapshot() (string, error) {
+	var snapshots []string
+
+	snapshots, err := app.ListSnapshots()
+	if err != nil {
+		return "", err
+	}
+
+	if len(snapshots) == 0 {
+		return "", fmt.Errorf("no snapshots found")
+	}
+
+	return snapshots[0], nil
+}
+
+// ListSnapshots returns a list of the names of all project snapshots
+func (app *DdevApp) ListSnapshots() ([]string, error) {
+	var err error
+	var snapshots []string
+
+	snapshotDir := filepath.Join(filepath.Dir(app.ConfigPath), "db_snapshots")
+
+	if !fileutil.FileExists(snapshotDir) {
+		return snapshots, nil
+	}
+
+	files, err := ioutil.ReadDir(snapshotDir)
+	if err != nil {
+		return snapshots, err
+	}
+
+	// Sort snapshots by last modification time
+	// we need that to detect the latest snapshot
+	// first snapshot is the latest
+	sort.Slice(files, func(i, j int) bool {
+		return files[i].ModTime().After(files[j].ModTime())
+	})
+
+	for _, f := range files {
+		if f.IsDir() {
+			snapshots = append(snapshots, f.Name())
+		}
+	}
+
+	return snapshots, nil
+}
+
 // RestoreSnapshot restores a mariadb snapshot of the db to be loaded
 // The project must be stopped and docker volume removed and recreated for this to work.
 func (app *DdevApp) RestoreSnapshot(snapshotName string) error {
@@ -1521,7 +1628,7 @@ func (app *DdevApp) RestoreSnapshot(snapshotName string) error {
 		return fmt.Errorf("Failed to process pre-restore-snapshot hooks: %v", err)
 	}
 
-	currentDBVersion := version.MariaDBDefaultVersion
+	currentDBVersion := nodeps.MariaDBDefaultVersion
 	if app.MariaDBVersion != "" {
 		currentDBVersion = app.MariaDBVersion
 	} else if app.MySQLVersion != "" {
@@ -1568,7 +1675,7 @@ func (app *DdevApp) RestoreSnapshot(snapshotName string) error {
 	err = os.Unsetenv("DDEV_MARIADB_LOCAL_COMMAND")
 	util.CheckErr(err)
 
-	util.Success("Restored database snapshot: %s", hostSnapshotDir)
+	util.Success("Restored database snapshot %s\n(On huge databases restore may be ongoing, view with 'ddev logs -s db -f')", hostSnapshotDir)
 	err = app.ProcessHooks("post-restore-snapshot")
 	if err != nil {
 		return fmt.Errorf("Failed to process post-restore-snapshot hooks: %v", err)
@@ -1821,6 +1928,7 @@ func (app *DdevApp) AddHostsEntriesIfNeeded() error {
 		if hosts.Has(dockerIP, name) {
 			continue
 		}
+		util.Warning("The hostname %s is not currently resolvable, trying to add it to the hosts file", name)
 		err = addHostEntry(name, dockerIP)
 		if err != nil {
 			return err
@@ -1830,10 +1938,16 @@ func (app *DdevApp) AddHostsEntriesIfNeeded() error {
 	return nil
 }
 
+// addHostEntry adds an entry to /etc/hosts
+// We would have hoped to use DNS or have found the entry already in hosts
+// But if it's not, try to add one.
 func addHostEntry(name string, ip string) error {
 	_, err := osexec.LookPath("sudo")
 	if (os.Getenv("DRUD_NONINTERACTIVE") != "") || err != nil {
 		util.Warning("You must manually add the following entry to your hosts file:\n%s %s\nOr with root/administrative privileges execute 'ddev hostname %s %s'", ip, name, name, ip)
+		if os.Getenv("WSL_DISTRO") != "" {
+			util.Warning("For WSL2, execute 'sudo ddev hostname %s %s' on Windows", name, ip)
+		}
 		return nil
 	}
 
@@ -1841,6 +1955,9 @@ func addHostEntry(name string, ip string) error {
 	util.CheckErr(err)
 
 	output.UserOut.Printf("ddev needs to add an entry to your hostfile.\nIt will require administrative privileges via the sudo command, so you may be required\nto enter your password for sudo. ddev is about to issue the command:")
+	if os.Getenv("WSL_DISTRO") != "" {
+		output.UserOut.Printf("You are on WSL2, so should manually execute 'sudo ddev hostname %s %s' on Windows", name, ip)
+	}
 
 	hostnameArgs := []string{ddevFullpath, "hostname", name, ip}
 	command := strings.Join(hostnameArgs, " ")

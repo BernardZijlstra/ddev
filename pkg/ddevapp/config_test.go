@@ -154,7 +154,7 @@ func TestHostName(t *testing.T) {
 	assert.NoError(err)
 	app.Name = util.RandString(32)
 
-	assert.Equal(app.GetHostname(), app.Name+"."+app.ProjectTLD)
+	assert.Equal(app.GetHostname(), strings.ToLower(app.Name+"."+app.ProjectTLD))
 }
 
 // TestWriteDockerComposeYaml tests the writing of a .ddev/docker-compose-* file.
@@ -211,8 +211,8 @@ func TestConfigCommand(t *testing.T) {
 	const phpVersionPos = 1
 	testMatrix := map[string][]string{
 		"drupal6phpversion": {nodeps.AppTypeDrupal6, nodeps.PHP56},
-		"drupal7phpversion": {nodeps.AppTypeDrupal7, nodeps.PHP72},
-		"drupal8phpversion": {nodeps.AppTypeDrupal8, nodeps.PHP73},
+		"drupal7phpversion": {nodeps.AppTypeDrupal7, nodeps.PHPDefault},
+		"drupal8phpversion": {nodeps.AppTypeDrupal8, nodeps.PHPDefault},
 	}
 
 	for testName, testValues := range testMatrix {
@@ -295,8 +295,8 @@ func TestConfigCommandInteractiveCreateDocrootDenied(t *testing.T) {
 
 	testMatrix := map[string][]string{
 		"drupal6phpversion": {nodeps.AppTypeDrupal6, nodeps.PHP56},
-		"drupal7phpversion": {nodeps.AppTypeDrupal7, nodeps.PHP72},
-		"drupal8phpversion": {nodeps.AppTypeDrupal8, nodeps.PHP73},
+		"drupal7phpversion": {nodeps.AppTypeDrupal7, nodeps.PHPDefault},
+		"drupal8phpversion": {nodeps.AppTypeDrupal8, nodeps.PHPDefault},
 	}
 
 	for testName := range testMatrix {
@@ -341,8 +341,8 @@ func TestConfigCommandCreateDocrootAllowed(t *testing.T) {
 	const phpVersionPos = 1
 	testMatrix := map[string][]string{
 		"drupal6phpversion": {nodeps.AppTypeDrupal6, nodeps.PHP56},
-		"drupal7phpversion": {nodeps.AppTypeDrupal7, nodeps.PHP72},
-		"drupal8phpversion": {nodeps.AppTypeDrupal8, nodeps.PHP73},
+		"drupal7phpversion": {nodeps.AppTypeDrupal7, nodeps.PHPDefault},
+		"drupal8phpversion": {nodeps.AppTypeDrupal8, nodeps.PHPDefault},
 	}
 
 	for testName, testValues := range testMatrix {
@@ -582,13 +582,13 @@ func TestConfigValidate(t *testing.T) {
 	app.PHPVersion = "1.1"
 	err = app.ValidateConfig()
 	assert.Error(err)
-	assert.Contains(err.Error(), "invalid PHP")
+	assert.Contains(err.Error(), "unsupported PHP")
 
 	app.PHPVersion = nodeps.PHPDefault
 	app.WebserverType = "server"
 	err = app.ValidateConfig()
 	assert.Error(err)
-	assert.Contains(err.Error(), "invalid webserver type")
+	assert.Contains(err.Error(), "unsupported webserver type")
 
 	app.WebserverType = nodeps.WebserverDefault
 	app.AdditionalHostnames = []string{"good", "b@d"}
@@ -936,6 +936,46 @@ func TestTimezoneConfig(t *testing.T) {
 	})
 	assert.NoError(err)
 	assert.Regexp(regexp.MustCompile("timezone=CES?T"), stdout)
+
+	runTime()
+}
+
+// TestComposerVersionConfig tests to make sure setting composer version takes effect in the container.
+func TestComposerVersionConfig(t *testing.T) {
+	assert := asrt.New(t)
+	app := &DdevApp{}
+	testVersion := "2.0.0-RC2"
+
+	site := TestSites[0]
+	switchDir := site.Chdir()
+	defer switchDir()
+
+	runTime := util.TimeTrack(time.Now(), fmt.Sprintf("%s %s", t.Name(), site.Name))
+
+	err := app.Init(site.Dir)
+	assert.NoError(err)
+	err = app.Stop(true, false)
+	assert.NoError(err)
+
+	t.Cleanup(func() {
+		app.ComposerVersion = ""
+		err = app.WriteConfig()
+		assert.NoError(err)
+		err = app.Stop(true, false)
+		assert.NoError(err)
+	})
+
+	app.ComposerVersion = testVersion
+	err = app.Start()
+	assert.NoError(err)
+
+	// Without timezone set, we should find Etc/UTC
+	stdout, _, err := app.Exec(&ExecOpts{
+		Service: "web",
+		Cmd:     "composer --version | awk '{print $3;}'",
+	})
+	assert.NoError(err)
+	assert.Equal(testVersion, strings.Trim(stdout, "\n"))
 
 	runTime()
 }

@@ -8,6 +8,7 @@ import (
 	"github.com/drud/ddev/pkg/output"
 	"io/ioutil"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"time"
@@ -92,7 +93,13 @@ func (site *TestSite) Prepare() error {
 	util.CheckErr(err)
 
 	output.UserOut.Printf("Copying directory %s to %s\n", cachedSrcDir, site.Dir)
-	err = fileutil.CopyDir(cachedSrcDir, site.Dir)
+	if runtime.GOOS != "windows" {
+		// Simple cp -r is far, far faster than our fileutil.CopyDir
+		cmd := exec.Command("bash", "-c", fmt.Sprintf(`cp -rp %s %s`, cachedSrcDir, site.Dir))
+		err = cmd.Run()
+	} else {
+		err = fileutil.CopyDir(cachedSrcDir, site.Dir)
+	}
 	if err != nil {
 		site.Cleanup()
 		return fmt.Errorf("Failed to CopyDir from %s to %s, err=%v", cachedSrcDir, site.Dir, err)
@@ -111,7 +118,7 @@ func (site *TestSite) Prepare() error {
 	app.Docroot = site.Docroot
 	app.Type = app.DetectAppType()
 	if app.Type != site.Type {
-		return errors.Errorf("Detected apptype does not match provided apptype")
+		return errors.Errorf("Detected apptype (%s) does not match provided apptype (%s)", app.Type, site.Type)
 	}
 
 	err = app.ConfigFileOverrideAction()

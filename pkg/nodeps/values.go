@@ -18,35 +18,6 @@ var ValidProviders = map[string]bool{
 	ProviderDdevLive: true,
 }
 
-// PHP Versions
-const (
-	PHP56 = "5.6"
-	PHP70 = "7.0"
-	PHP71 = "7.1"
-	PHP72 = "7.2"
-	PHP73 = "7.3"
-	PHP74 = "7.4"
-)
-
-// MariaDB Versions
-const (
-	MariaDB55  = "5.5"
-	MariaDB100 = "10.0"
-	MariaDB101 = "10.1"
-	MariaDB102 = "10.2"
-	MariaDB103 = "10.3"
-	MariaDB104 = "10.4"
-	MariaDB105 = "10.5"
-)
-
-// Oracle MySQL versions
-const (
-	MySQL55 = "5.5"
-	MySQL56 = "5.6"
-	MySQL57 = "5.7"
-	MySQL80 = "8.0"
-)
-
 // Database Types
 const (
 	MariaDB = "mariadb"
@@ -61,37 +32,6 @@ const (
 	WebContainer          = "web"
 	RouterContainer       = "ddev-router"
 )
-
-// PHPDefault is the default PHP version, overridden by $DDEV_PHP_VERSION
-const PHPDefault = PHP73
-
-// ValidPHPVersions should be updated whenever PHP versions are added or removed, and should
-// be used to ensure user-supplied values are valid.
-var ValidPHPVersions = map[string]bool{
-	PHP56: true,
-	PHP70: true,
-	PHP71: true,
-	PHP72: true,
-	PHP73: true,
-	PHP74: true,
-}
-
-var ValidMariaDBVersions = map[string]bool{
-	MariaDB55:  true,
-	MariaDB100: true,
-	MariaDB101: true,
-	MariaDB102: true,
-	MariaDB103: true,
-	MariaDB104: true,
-	MariaDB105: true,
-}
-
-var ValidMySQLVersions = map[string]bool{
-	MySQL55: true,
-	MySQL56: true,
-	MySQL57: true,
-	MySQL80: true,
-}
 
 // Webserver types
 const (
@@ -110,6 +50,9 @@ var WebserverDefault = WebserverNginxFPM
 
 // NFSMountEnabledDefault is default value for app.NFSMountEnabled
 var NFSMountEnabledDefault = false
+
+// FailOnHookFailDefault is the default value for app.FailOnHookFail
+var FailOnHookFailDefault = false
 
 // ValidWebserverTypes should be updated whenever supported webserver types are added or
 // removed, and should be used to ensure user-supplied values are valid.
@@ -131,6 +74,7 @@ const (
 	AppTypeMagento   = "magento"
 	AppTypeMagento2  = "magento2"
 	AppTypeLaravel   = "laravel"
+	AppTypeShopware6 = "shopware6"
 )
 
 // Ports and other defaults
@@ -220,7 +164,7 @@ func GetValidMariaDBVersions() []string {
 	for p := range ValidMariaDBVersions {
 		s = append(s, p)
 	}
-
+	sort.Strings(s)
 	return s
 }
 
@@ -231,7 +175,7 @@ func GetValidMySQLVersions() []string {
 	for p := range ValidMySQLVersions {
 		s = append(s, p)
 	}
-
+	sort.Strings(s)
 	return s
 }
 

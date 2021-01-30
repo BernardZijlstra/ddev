@@ -57,8 +57,8 @@ services:
     command: "$DDEV_MARIADB_LOCAL_COMMAND"
     healthcheck:
       interval: 1s
-      retries: 30
-      start_period: 20s
+      retries: 120
+      start_period: 120s
       timeout: 120s
 {{end}}
   web:
@@ -124,6 +124,7 @@ services:
 {{ if not .DisableSettingsManagement }}
       - DRUSH_OPTIONS_URI=$DDEV_PRIMARY_URL
 {{ end }}
+      - DRUSH_ALLOW_XDEBUG=1
       - DOCKER_IP={{ .DockerIP }}
       - HOST_DOCKER_INTERNAL_IP={{ .HostDockerInternalIP }}
       # HTTP_EXPOSE allows for ports accepting HTTP traffic to be accessible from <site>.ddev.site:<port>
@@ -137,6 +138,8 @@ services:
       - SSH_AUTH_SOCK=/home/.ssh-agent/socket
       - TZ={{ .Timezone }}
       - VIRTUAL_HOST=${DDEV_HOSTNAME}
+      {{ range $env := .WebEnvironment }}- "{{ $env }}"
+      {{ end }}
     labels:
       com.ddev.site-name: ${DDEV_SITENAME}
       com.ddev.platform: {{ .Plugin }}
@@ -150,8 +153,8 @@ services:
     {{ end }}
     healthcheck:
       interval: 1s
-      retries: 20
-      start_period: 20s
+      retries: 120
+      start_period: 120s
       timeout: 120s
 
 {{ if not .OmitDBA }}
@@ -170,8 +173,8 @@ services:
       - "80"
     hostname: {{ .Name }}-dba
     environment:
-      - PMA_USER=db
-      - PMA_PASSWORD=db
+      - PMA_USER=root
+      - PMA_PASSWORD=root
       - VIRTUAL_HOST=$DDEV_HOSTNAME
       - UPLOAD_LIMIT=1024M
       - TZ={{ .Timezone }}
@@ -221,7 +224,7 @@ const ConfigInstructions = `
 
 # docroot: <relative_path> # Relative path to the directory containing index.php.
 
-# php_version: "7.3"  # PHP version to use, "5.6", "7.0", "7.1", "7.2", "7.3", "7.4"
+# php_version: "7.4"  # PHP version to use, "5.6", "7.0", "7.1", "7.2", "7.3", "7.4" "8.0"
 
 # You can explicitly specify the webimage, dbimage, dbaimage lines but this
 # is not recommended, as the images are often closely tied to ddev's' behavior,
@@ -252,6 +255,13 @@ const ConfigInstructions = `
 # it can be set to any valid timezone,
 # see https://en.wikipedia.org/wiki/List_of_tz_database_time_zones
 # For example Europe/Dublin or MST7MDT
+
+# composer_version: "2"
+# if composer_version:"" it will use the current ddev default composer release.
+# It can also be set to "1", to get most recent composer v1
+# or "2" for most recent composer v2.
+# It can be set to any existing specific composer version.
+# After first project 'ddev start' this will not be updated until it changes
 
 # additional_hostnames:
 #  - somename
@@ -285,6 +295,9 @@ const ConfigInstructions = `
 # Great performance improvement but requires host configuration first.
 # See https://ddev.readthedocs.io/en/stable/users/performance/#using-nfs-to-mount-the-project-into-the-container
 
+# fail_on_hook_fail: False
+# Decide whether 'ddev start' should be interrupted by a failing hook
+
 # host_https_port: "59002"
 # The host port binding for https can be explicitly specified. It is
 # dynamic unless otherwise specified.
@@ -309,7 +322,7 @@ const ConfigInstructions = `
 # mailhog_https_port: "8026"
 # The MailHog ports can be changed from the default 8025 and 8026
 
-# webimage_extra_packages: [php7.3-tidy, php-bcmath]
+# webimage_extra_packages: [php7.4-tidy, php-bcmath]
 # Extra Debian packages that are needed in the webimage can be added here
 
 # dbimage_extra_packages: [telnet,netcat]
@@ -335,6 +348,11 @@ const ConfigInstructions = `
 # If true, ddev will not create CMS-specific settings files like
 # Drupal's settings.php/settings.ddev.php or TYPO3's AdditionalSettings.php
 # In this case the user must provide all such settings.
+
+# You can inject environment variables into the web container with:
+# web_environment: 
+# - SOMEENV=somevalue
+# - SOMEOTHERENV=someothervalue
 
 # no_project_mount: false
 # (Experimental) If true, ddev will not mount the project into the web container;
@@ -438,8 +456,8 @@ services:
     restart: "{{ if .AutoRestartContainers }}always{{ else }}no{{ end }}"
     healthcheck:
       interval: 1s
-      retries: 20
-      start_period: 20s
+      retries: 120
+      start_period: 120s
       timeout: 120s
 
 networks:

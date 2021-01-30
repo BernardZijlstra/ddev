@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/drud/ddev/pkg/archive"
 	exec2 "github.com/drud/ddev/pkg/exec"
+	"github.com/drud/ddev/pkg/globalconfig"
 	"github.com/drud/ddev/pkg/util"
 	"github.com/drud/ddev/pkg/version"
 	"io"
@@ -122,6 +123,20 @@ func FindContainersByLabels(labels map[string]string) ([]docker.APIContainers, e
 	containers, err := client.ListContainers(docker.ListContainersOptions{
 		All:     true,
 		Filters: map[string][]string{"label": filterList},
+	})
+	if err != nil {
+		return nil, err
+	}
+	return containers, nil
+}
+
+// FindContainersWithLabel returns all containers with the given label
+// It ignores the value of the label, is only interested that the label exists.
+func FindContainersWithLabel(label string) ([]docker.APIContainers, error) {
+	client := GetDockerClient()
+	containers, err := client.ListContainers(docker.ListContainersOptions{
+		All:     true,
+		Filters: map[string][]string{"label": {label}},
 	})
 	if err != nil {
 		return nil, err
@@ -718,6 +733,8 @@ func GetHostDockerInternalIP() (string, error) {
 				return "", fmt.Errorf("docker0 interface IP address cannot be determined. You may need to 'ip link set docker0 up' or restart docker or reboot to get xdebug or nfsmount_enabled to work")
 			}
 		}
+	} else if runtime.GOOS == "darwin" && runtime.GOARCH == "arm64" {
+		hostDockerInternal = globalconfig.DdevGlobalConfig.HostDockerInternal
 	}
 	return hostDockerInternal, nil
 }

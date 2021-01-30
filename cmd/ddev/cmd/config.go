@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"github.com/drud/ddev/pkg/globalconfig"
 	"github.com/drud/ddev/pkg/nodeps"
-	"github.com/drud/ddev/pkg/version"
 	"github.com/mitchellh/go-homedir"
 	"os"
 	"strings"
@@ -31,7 +30,7 @@ var (
 	// projectTypeArg is the ddev app type, like drupal7/drupal8/wordpress.
 	projectTypeArg string
 
-	// phpVersionArg overrides the default version of PHP to be used in the web container, like 5.6/7.0/7.1/7.2/7.3/7.4.
+	// phpVersionArg overrides the default version of PHP to be used in the web container, like 5.6/7.0/7.1/7.2/7.3/7.4/8.0.
 	phpVersionArg string
 
 	// httpPortArg overrides the default HTTP port (80).
@@ -112,6 +111,9 @@ var (
 	// nfsMountEnabled sets nfs_mount_enabled
 	nfsMountEnabled bool
 
+	// failOnHookFail sets fail_on_hook_fail
+	failOnHookFail bool
+
 	// hostDBPortArg sets host_db_port
 	hostDBPortArg string
 
@@ -137,6 +139,8 @@ var (
 
 	// ngrokArgs provides additional args to the ngrok command in `ddev share`
 	ngrokArgs string
+
+	webEnvironmentLocal string
 )
 
 var providerName = nodeps.ProviderDefault
@@ -179,6 +183,7 @@ func handleConfigRun(cmd *cobra.Command, args []string) {
 		util.Failed("Failed to process hook 'pre-config'")
 	}
 
+	// If no flags are provided, prompt for configuration
 	if cmd.Flags().NFlag() == 0 {
 		err = app.PromptForConfig()
 		if err != nil {
@@ -246,6 +251,7 @@ func init() {
 	ConfigCommand.Flags().StringVar(&additionalHostnamesArg, "additional-hostnames", "", "A comma-delimited list of hostnames for the project")
 	ConfigCommand.Flags().StringVar(&additionalFQDNsArg, "additional-fqdns", "", "A comma-delimited list of FQDNs for the project")
 	ConfigCommand.Flags().StringVar(&omitContainersArg, "omit-containers", "", "A comma-delimited list of container types that should not be started when the project is started")
+	ConfigCommand.Flags().StringVar(&webEnvironmentLocal, "web-environment", "", `Add environment variables to web container: --web-environment="TYPO3_CONTEXT=Development,SOMEENV=someval"`)
 	ConfigCommand.Flags().BoolVar(&createDocroot, "create-docroot", false, "Prompts ddev to create the docroot if it doesn't exist")
 	ConfigCommand.Flags().BoolVar(&showConfigLocation, "show-config-location", false, "Output the location of the config.yaml file if it exists, or error that it doesn't exist.")
 	ConfigCommand.Flags().StringVar(&uploadDirArg, "upload-dir", "", "Sets the project's upload directory, the destination directory of the import-files command.")
@@ -268,6 +274,7 @@ func init() {
 	ConfigCommand.Flags().String("mysql-version", "", "Oracle mysql version to use (incompatible with --mariadb-version)")
 
 	ConfigCommand.Flags().BoolVar(&nfsMountEnabled, "nfs-mount-enabled", false, "enable NFS mounting of project in container")
+	ConfigCommand.Flags().BoolVar(&failOnHookFail, "fail-on-hook-fail", false, "Decide whether 'ddev start' should be interrupted by a failing hook")
 	ConfigCommand.Flags().StringVar(&hostWebserverPortArg, "host-webserver-port", "", "The web container's localhost-bound port")
 	ConfigCommand.Flags().StringVar(&hostHTTPSPortArg, "host-https-port", "", "The web container's localhost-bound https port")
 
@@ -311,6 +318,10 @@ func init() {
 	ConfigCommand.Flags().String("timezone", "", "Specify timezone for containers and php, like Europe/London or America/Denver or GMT or UTC")
 
 	ConfigCommand.Flags().Bool("disable-settings-management", false, "Prevent ddev from creating or updating CMS settings files")
+
+	ConfigCommand.Flags().String("composer-version", "", `Specify override for composer version in web container. This may be "", "1", "2", or a specific version.`)
+
+	ConfigCommand.Flags().Bool("auto", true, `Automatically run config without prompting.`)
 
 	RootCmd.AddCommand(ConfigCommand)
 }
@@ -426,12 +437,6 @@ func handleMainConfigArgs(cmd *cobra.Command, args []string, app *ddevapp.DdevAp
 		util.Failed("failed to run ConfigFileOverrideAction: %v", err)
 	}
 
-	// We don't want to write out dbimage if it's just the one that goes with
-	// the mariadb_version.
-	if app.DBImage == version.GetDBImage(nodeps.MariaDB, "", app.MariaDBVersion) {
-		app.DBImage = ""
-	}
-
 	if phpVersionArg != "" {
 		app.PHPVersion = phpVersionArg
 	}
@@ -455,21 +460,37 @@ func handleMainConfigArgs(cmd *cobra.Command, args []string, app *ddevapp.DdevAp
 		app.HostDBPort = hostDBPortArg
 	}
 
-	// If the mariaDBVersionArg is set, use it
+	// If the mariadb-version changed, use it
 	if cmd.Flag("mariadb-version").Changed {
-		app.MariaDBVersion = mariaDBVersionArg
-	}
-	// If the mariaDBVersionArg is set, use it
-	if cmd.Flag("mysql-version").Changed {
-		app.MySQLVersion, err = cmd.Flags().GetString("mysql-version")
+		wantVer, err := cmd.Flags().GetString("mariadb-version")
 		if err != nil {
-			util.Failed("Incorrect mysql-version: %v", err)
+			util.Failed("Incorrect mariadb-version %s: '%v'", wantVer, err)
 		}
 
+		if app.MySQLVersion != "" && wantVer != "" {
+			util.Failed(`mariadb-version cannot be set if mysql-version is already set. mysql-version is set to %s. Use ddev config --mysql-version="" and then ddev config --mariadb-version=%s`, app.MySQLVersion, wantVer)
+		}
+
+		app.MariaDBVersion = wantVer
+	}
+	// If the mysql-version was changed is set, use it
+	if cmd.Flag("mysql-version").Changed {
+		wantVer, err := cmd.Flags().GetString("mysql-version")
+		if err != nil {
+			util.Failed("Incorrect mysql-version %s: '%v'", wantVer, err)
+		}
+		if app.MariaDBVersion != "" && wantVer != "" {
+			util.Failed(`mysql-version cannot be set if mariadb-version is already set. mariadb-version is set to %s. Use ddev config --mariadb-version="" --mysql-version=%s`, app.MariaDBVersion, wantVer)
+		}
+		app.MySQLVersion = wantVer
 	}
 
 	if cmd.Flag("nfs-mount-enabled").Changed {
 		app.NFSMountEnabled = nfsMountEnabled
+	}
+
+	if cmd.Flag("fail-on-hook-fail").Changed {
+		app.FailOnHookFail = failOnHookFail
 	}
 
 	// This bool flag is false by default, so only use the value if the flag was explicity set.
@@ -508,6 +529,15 @@ func handleMainConfigArgs(cmd *cobra.Command, args []string, app *ddevapp.DdevAp
 		app.OmitContainers = strings.Split(omitContainersArg, ",")
 	}
 
+	if cmd.Flag("web-environment").Changed {
+		env := strings.Replace(webEnvironmentLocal, " ", "", -1)
+		if env == "" {
+			app.WebEnvironment = []string{}
+		} else {
+			app.WebEnvironment = strings.Split(env, ",")
+		}
+	}
+
 	if cmd.Flag("webimage-extra-packages").Changed {
 		if cmd.Flag("webimage-extra-packages").Value.String() == "" {
 			app.WebImageExtraPackages = nil
@@ -540,6 +570,13 @@ func handleMainConfigArgs(cmd *cobra.Command, args []string, app *ddevapp.DdevAp
 		app.Timezone, err = cmd.Flags().GetString("timezone")
 		if err != nil {
 			util.Failed("Incorrect timezone: %v", err)
+		}
+	}
+
+	if cmd.Flag("composer-version").Changed {
+		app.ComposerVersion, err = cmd.Flags().GetString("composer-version")
+		if err != nil {
+			util.Failed("Incorrect composer-version: %v", err)
 		}
 	}
 

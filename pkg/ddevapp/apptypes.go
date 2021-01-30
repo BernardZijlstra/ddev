@@ -2,12 +2,12 @@ package ddevapp
 
 import (
 	"fmt"
-	"github.com/drud/ddev/pkg/nodeps"
 	"os"
 	"path"
 	"path/filepath"
 	"sort"
 
+	"github.com/drud/ddev/pkg/nodeps"
 	"github.com/drud/ddev/pkg/util"
 )
 
@@ -70,31 +70,32 @@ func init() {
 			settingsCreator: createDrupal6SettingsFile, uploadDir: getDrupalUploadDir, hookDefaultComments: getDrupal6Hooks, apptypeSettingsPaths: setDrupalSiteSettingsPaths, appTypeDetect: isDrupal6App, postImportDBAction: nil, configOverrideAction: drupal6ConfigOverrideAction, postConfigAction: nil, postStartAction: drupal6PostStartAction, importFilesAction: drupalImportFilesAction, defaultWorkingDirMap: docrootWorkingDir,
 		},
 		nodeps.AppTypeDrupal7: {
-			settingsCreator: createDrupal7SettingsFile, uploadDir: getDrupalUploadDir, hookDefaultComments: getDrupal7Hooks, apptypeSettingsPaths: setDrupalSiteSettingsPaths, appTypeDetect: isDrupal7App, postImportDBAction: nil, configOverrideAction: drupal7ConfigOverrideAction, postConfigAction: nil, postStartAction: drupal7PostStartAction, importFilesAction: drupalImportFilesAction, defaultWorkingDirMap: docrootWorkingDir,
+			settingsCreator: createDrupal7SettingsFile, uploadDir: getDrupalUploadDir, hookDefaultComments: getDrupal7Hooks, apptypeSettingsPaths: setDrupalSiteSettingsPaths, appTypeDetect: isDrupal7App, postImportDBAction: nil, configOverrideAction: nil, postConfigAction: nil, postStartAction: drupal7PostStartAction, importFilesAction: drupalImportFilesAction, defaultWorkingDirMap: docrootWorkingDir,
 		},
 		nodeps.AppTypeDrupal8: {
-			settingsCreator: createDrupal8SettingsFile, uploadDir: getDrupalUploadDir, hookDefaultComments: getDrupal8Hooks, apptypeSettingsPaths: setDrupalSiteSettingsPaths, appTypeDetect: isDrupal8App, postImportDBAction: nil, configOverrideAction: drupal8ConfigOverrideAction, postConfigAction: nil, postStartAction: drupal8PostStartAction, importFilesAction: drupalImportFilesAction, defaultWorkingDirMap: docrootWorkingDir,
+			settingsCreator: createDrupal8SettingsFile, uploadDir: getDrupalUploadDir, hookDefaultComments: getDrupal8Hooks, apptypeSettingsPaths: setDrupalSiteSettingsPaths, appTypeDetect: isDrupal8App, postImportDBAction: nil, configOverrideAction: nil, postConfigAction: nil, postStartAction: drupal8PostStartAction, importFilesAction: drupalImportFilesAction,
 		},
 		nodeps.AppTypeDrupal9: {
-			settingsCreator: createDrupal9SettingsFile, uploadDir: getDrupalUploadDir, hookDefaultComments: getDrupal8Hooks, apptypeSettingsPaths: setDrupalSiteSettingsPaths, appTypeDetect: isDrupal9App, postImportDBAction: nil, configOverrideAction: drupal9ConfigOverrideAction, postConfigAction: nil, postStartAction: drupal8PostStartAction, importFilesAction: drupalImportFilesAction, defaultWorkingDirMap: docrootWorkingDir,
+			settingsCreator: createDrupal9SettingsFile, uploadDir: getDrupalUploadDir, hookDefaultComments: getDrupal8Hooks, apptypeSettingsPaths: setDrupalSiteSettingsPaths, appTypeDetect: isDrupal9App, postImportDBAction: nil, configOverrideAction: nil, postConfigAction: nil, postStartAction: drupal8PostStartAction, importFilesAction: drupalImportFilesAction,
 		},
 
 		nodeps.AppTypeWordPress: {
 			settingsCreator: createWordpressSettingsFile, uploadDir: getWordpressUploadDir, hookDefaultComments: getWordpressHooks, apptypeSettingsPaths: setWordpressSiteSettingsPaths, appTypeDetect: isWordpressApp, postImportDBAction: nil, configOverrideAction: nil, postConfigAction: nil, postStartAction: wordpressPostStartAction, importFilesAction: wordpressImportFilesAction,
 		},
 		nodeps.AppTypeTYPO3: {
-			settingsCreator: createTypo3SettingsFile, uploadDir: getTypo3UploadDir, hookDefaultComments: getTypo3Hooks, apptypeSettingsPaths: setTypo3SiteSettingsPaths, appTypeDetect: isTypo3App, postImportDBAction: nil, configOverrideAction: typo3ConfigOverrideAction, postConfigAction: nil, postStartAction: typo3PostStartAction, importFilesAction: typo3ImportFilesAction,
+			settingsCreator: createTypo3SettingsFile, uploadDir: getTypo3UploadDir, hookDefaultComments: getTypo3Hooks, apptypeSettingsPaths: setTypo3SiteSettingsPaths, appTypeDetect: isTypo3App, postImportDBAction: nil, configOverrideAction: nil, postConfigAction: nil, postStartAction: typo3PostStartAction, importFilesAction: typo3ImportFilesAction,
 		},
 		nodeps.AppTypeBackdrop: {
 			settingsCreator: createBackdropSettingsFile, uploadDir: getBackdropUploadDir, hookDefaultComments: getBackdropHooks, apptypeSettingsPaths: setBackdropSiteSettingsPaths, appTypeDetect: isBackdropApp, postImportDBAction: backdropPostImportDBAction, configOverrideAction: nil, postConfigAction: nil, postStartAction: backdropPostStartAction, importFilesAction: backdropImportFilesAction, defaultWorkingDirMap: docrootWorkingDir,
 		},
 		nodeps.AppTypeMagento: {
-			settingsCreator: createMagentoSettingsFile, uploadDir: getMagentoUploadDir, hookDefaultComments: nil, apptypeSettingsPaths: setMagentoSiteSettingsPaths, appTypeDetect: isMagentoApp, postImportDBAction: nil, configOverrideAction: magentoConfigOverrideAction, postConfigAction: nil, postStartAction: nil, importFilesAction: magentoImportFilesAction, defaultWorkingDirMap: nil,
+			settingsCreator: createMagentoSettingsFile, uploadDir: getMagentoUploadDir, hookDefaultComments: nil, apptypeSettingsPaths: setMagentoSiteSettingsPaths, appTypeDetect: isMagentoApp, postImportDBAction: nil, configOverrideAction: magentoConfigOverrideAction, postConfigAction: nil, postStartAction: nil, importFilesAction: magentoImportFilesAction,
 		},
 		nodeps.AppTypeMagento2: {
-			settingsCreator: createMagento2SettingsFile, uploadDir: getMagento2UploadDir, hookDefaultComments: nil, apptypeSettingsPaths: setMagento2SiteSettingsPaths, appTypeDetect: isMagento2App, postImportDBAction: nil, configOverrideAction: magento2ConfigOverrideAction, postConfigAction: nil, postStartAction: nil, importFilesAction: magentoImportFilesAction, defaultWorkingDirMap: nil,
+			settingsCreator: createMagento2SettingsFile, uploadDir: getMagento2UploadDir, hookDefaultComments: nil, apptypeSettingsPaths: setMagento2SiteSettingsPaths, appTypeDetect: isMagento2App, postImportDBAction: nil, configOverrideAction: nil, postConfigAction: nil, postStartAction: nil, importFilesAction: magentoImportFilesAction,
 		},
-		nodeps.AppTypeLaravel: {appTypeDetect: isLaravelApp, postStartAction: laravelPostStartAction},
+		nodeps.AppTypeLaravel:   {appTypeDetect: isLaravelApp, postStartAction: laravelPostStartAction},
+		nodeps.AppTypeShopware6: {appTypeDetect: isShopware6App, apptypeSettingsPaths: setShopware6SiteSettingsPaths, uploadDir: getShopwareUploadDir, configOverrideAction: nil, postStartAction: shopware6PostStartAction, importFilesAction: shopware6ImportFilesAction},
 	}
 }
 

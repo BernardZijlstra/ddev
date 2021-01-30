@@ -21,7 +21,7 @@ You can also add tools that are not provided by default using [`webimage_extra_p
 
 ### DDEV and Composer
 
-ddev provides a built-in command to simplify use of [Composer](https://getcomposer.org/), the dependency manager for PHP, that allows a user to create and manage projects without having Composer installed on the host machine. Generally, executing any Composer command through DDEV is as simple as prepending the command with `ddev`. DDEV will execute the command at the project root in the web container, passing all arguments and flags to Composer. To execute Composer in other directories within the container, use `ddev ssh` or `ddev exec -d <dir>`. For example:
+ddev provides a built-in command to simplify use of [Composer](https://getcomposer.org/), the dependency manager for PHP, that allows a user to create and manage projects without having Composer installed on the host machine. Generally, executing any Composer command through DDEV is as simple as prepending the command with `ddev`. DDEV will execute the command at the project root in the web container, passing (almost) all arguments and flags to Composer. To execute Composer in other directories within the container, use `ddev ssh` or `ddev exec -d <dir>`. For example:
 
 `ddev composer help`
 `ddev composer require <package>`
@@ -38,7 +38,7 @@ To execute a fully-featured `composer create-project` command, you can execute t
 
 `ddev exec composer create-project ...`
 
-Note: if you run `ddev composer global require`, (or run `composer global require` inside the web container) the global packages will be installed in the in-container user's home directory ( ~/.composer) and will disappear on the next container restart, requiring rerun of the command. You may need an additional step of synchronizing created composer configuration and installed packages with the DDev's [homeadditions folder](extend/in-container-configuration.md) on the host.
+Note: if you run `ddev composer global require`, (or run `composer global require` inside the web container) the global packages will be installed in the in-container user's home directory ( ~/.composer) and will disappear on the next container restart, requiring rerun of the command. You may need an additional step of synchronizing created composer configuration and installed packages with the DDEV's [homeadditions folder](extend/in-container-configuration.md) on the host.
 
 <a name="windows-os-and-ddev-composer"></a>
 
@@ -56,9 +56,19 @@ You generally don't have to worry about any of this, but it does keep things cle
 
 ![setting developer mode](images/developer_mode_2.png)
 
+#### Limitations with `ddev composer`
+
+* Using `ddev composer --version` or `ddev composer -V` will not work, since `ddev` tries to utilize the command for itself. Use `ddev exec composer --version` instead.
+* Quotes, "@" signs and asterisks can cause troubles, since they get eaten up by the bash on the host. In such cases use double quotes, e.g.:
+    * `ddev composer require "'drupal/core:9.0.0 as 8.9.0'" --no-update`
+    * `ddev composer config repositories.local path "'packages/*'"`
+    * `ddev composer require "my-company/my-sitepackage:@dev" --no-update`
+
+If you encounter any other scenario, consider using `ddev ssh` and run composer inside the container as outlined above.
+
 ### Email Capture and Review
 
-[MailHog](https://github.com/mailhog/MailHog) is a mail catcher which is configured to capture and display emails sent by PHP in the development environment.
+[MailHog](https://github.com/MailHog/MailHog) is a mail catcher which is configured to capture and display emails sent by PHP in the development environment.
 
 After your project is started, access the MailHog web interface at its default port:
 
@@ -66,7 +76,7 @@ After your project is started, access the MailHog web interface at its default p
 http://mysite.ddev.site:8025
 ```
 
-Please note this will not intercept emails if your application is configured to use SMTP or a 3rd-party ESP integration. If you are using SMTP for outgoing mail handling ([Swiftmailer](https://www.drupal.org/project/swiftmailer) or [SMTP](https://www.drupal.org/project/smtp) modules for example), update your application configuration to use `localhost` on port `1025` as the SMTP server locally in order to use MailHog.
+Please note this will not intercept emails if your application is configured to use SMTP or a 3rd-party ESP integration. If you are using SMTP for outgoing mail handling ([Swift Mailer](https://www.drupal.org/project/swiftmailer) or [SMTP](https://www.drupal.org/project/smtp) modules for example), update your application configuration to use `localhost` on port `1025` as the SMTP server locally in order to use MailHog.
 
 ### Database Management
 

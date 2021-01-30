@@ -44,8 +44,6 @@ hooks:
   post-import-db:
     - exec: drush cr
     - exec: drush uli
-  post-start:
-    - exec: sudo apt-get update && DEBIAN_FRONTEND=noninteractive sudo apt-get install -y ghostscript sqlite3 php7.2-sqlite3 && sudo killall -HUP php-fpm
 ```
 
 Example: _Use wp-cli to replace the production URL with development URL in the database of a WordPress project_
@@ -163,6 +161,6 @@ hooks:
 ## Adding Additional Debian Packages (PHP Modules) Example
 
 ```yaml
-webimage_extra_packages: ["php-bcmath", "php7.3-tidy"]
+webimage_extra_packages: ["php-bcmath", "php7.4-tidy"]
 dbimage_extra_packages: ["vim"]
 ```

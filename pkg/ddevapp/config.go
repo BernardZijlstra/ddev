@@ -80,9 +80,12 @@ func NewApp(appRoot string, includeOverrides bool, provider string) (*DdevApp, e
 	app.ConfigPath = app.GetConfigPath("config.yaml")
 	app.Type = nodeps.AppTypePHP
 	app.PHPVersion = nodeps.PHPDefault
+	app.MariaDBVersion = nodeps.MariaDBDefaultVersion
 	app.WebserverType = nodeps.WebserverDefault
 	app.NFSMountEnabled = nodeps.NFSMountEnabledDefault
 	app.NFSMountEnabledGlobal = globalconfig.DdevGlobalConfig.NFSMountEnabledGlobal
+	app.FailOnHookFail = nodeps.FailOnHookFailDefault
+	app.FailOnHookFailGlobal = globalconfig.DdevGlobalConfig.FailOnHookFailGlobal
 	app.RouterHTTPPort = nodeps.DdevDefaultRouterHTTPPort
 	app.RouterHTTPSPort = nodeps.DdevDefaultRouterHTTPSPort
 	app.PHPMyAdminPort = nodeps.DdevDefaultPHPMyAdminPort
@@ -107,6 +110,11 @@ func NewApp(appRoot string, includeOverrides bool, provider string) (*DdevApp, e
 		if err != nil {
 			return app, fmt.Errorf("%v exists but cannot be read. It may be invalid due to a syntax error.: %v", app.ConfigPath, err)
 		}
+	}
+	// If MySQLVersion is now non-default/non-empty, then empty
+	// MariaDBVersion in its favor.
+	if app.MySQLVersion != "" {
+		app.MariaDBVersion = ""
 	}
 	app.SetApptypeSettingsPaths()
 
@@ -182,8 +190,9 @@ func (app *DdevApp) WriteConfig() error {
 	if appcopy.ProjectTLD == nodeps.DdevDefaultTLD {
 		appcopy.ProjectTLD = ""
 	}
-	if appcopy.MariaDBVersion == version.GetDBImage(nodeps.MariaDB) {
-		appcopy.MariaDBVersion = ""
+	// If mariadb-version is "" and mysql-version is not set, then set mariadb-version to default
+	if appcopy.MariaDBVersion == "" && appcopy.MySQLVersion == "" {
+		appcopy.MariaDBVersion = nodeps.MariaDBDefaultVersion
 	}
 
 	// We now want to reserve the port we're writing for HostDBPort and HostWebserverPort and so they don't
@@ -430,28 +439,31 @@ func (app *DdevApp) ValidateConfig() error {
 
 	// validate PHP version
 	if !nodeps.IsValidPHPVersion(app.PHPVersion) {
-		return fmt.Errorf("invalid PHP version: %s, must be one of %v", app.PHPVersion, nodeps.GetValidPHPVersions()).(invalidPHPVersion)
+		return fmt.Errorf("unsupported PHP version: %s, ddev (%s) only supports the following versions: %v", app.PHPVersion, runtime.GOARCH, nodeps.GetValidPHPVersions()).(invalidPHPVersion)
 	}
 
 	// validate webserver type
 	if !nodeps.IsValidWebserverType(app.WebserverType) {
-		return fmt.Errorf("invalid webserver type: %s, must be one of %s", app.WebserverType, nodeps.GetValidWebserverTypes()).(invalidWebserverType)
+		return fmt.Errorf("unsupported webserver type: %s, ddev (%s) only supports the following webserver types: %s", app.WebserverType, runtime.GOARCH, nodeps.GetValidWebserverTypes()).(invalidWebserverType)
 	}
 
 	if !nodeps.IsValidOmitContainers(app.OmitContainers) {
-		return fmt.Errorf("invalid omit_containers: %s, must be one of %s", app.OmitContainers, nodeps.GetValidOmitContainers()).(InvalidOmitContainers)
+		return fmt.Errorf("unsupported omit_containers: %s, ddev (%s) only supports the following for omit_containers: %s", app.OmitContainers, runtime.GOARCH, nodeps.GetValidOmitContainers()).(InvalidOmitContainers)
 	}
 
 	if app.MariaDBVersion != "" {
-		// Validate mariadb version version
+		// Validate mariadb version
 		if !nodeps.IsValidMariaDBVersion(app.MariaDBVersion) {
-			return fmt.Errorf("invalid mariadb_version: %s, must be one of %s", app.MariaDBVersion, nodeps.GetValidMariaDBVersions()).(invalidMariaDBVersion)
+			return fmt.Errorf("unsupported mariadb_version: %s, ddev (%s) only supports the following versions: %s", app.MariaDBVersion, runtime.GOARCH, nodeps.GetValidMariaDBVersions()).(invalidMariaDBVersion)
 		}
 	}
 	if app.MySQLVersion != "" {
 		// Validate /mysql version
 		if !nodeps.IsValidMySQLVersion(app.MySQLVersion) {
-			return fmt.Errorf("invalid mysql_version: %s, must be one of %s", app.MySQLVersion, nodeps.GetValidMySQLVersions()).(invalidMySQLVersion)
+			if len(nodeps.GetValidMySQLVersions()) == 0 {
+				return fmt.Errorf("MySQL is not yet supported on your architecture (%s) because mysql does not provide packages (or docker images)", runtime.GOARCH)
+			}
+			return fmt.Errorf("unsupported mysql_version: %s; ddev (%s) only supports the following versions %s", app.MySQLVersion, runtime.GOARCH, nodeps.GetValidMySQLVersions()).(invalidMySQLVersion)
 		}
 	}
 
@@ -489,7 +501,7 @@ func (app *DdevApp) DockerComposeFullRenderedYAMLPath() string {
 
 // GetHostname returns the primary hostname of the app.
 func (app *DdevApp) GetHostname() string {
-	return app.Name + "." + app.ProjectTLD
+	return strings.ToLower(app.Name) + "." + app.ProjectTLD
 }
 
 // GetHostnames returns an array of all the configured hostnames.
@@ -500,10 +512,12 @@ func (app *DdevApp) GetHostnames() []string {
 	nameListMap := make(map[string]int)
 
 	for _, name := range app.AdditionalHostnames {
+		name = strings.ToLower(name)
 		nameListMap[name+"."+app.ProjectTLD] = 1
 	}
 
 	for _, name := range app.AdditionalFQDNs {
+		name = strings.ToLower(name)
 		nameListMap[name] = 1
 	}
 
@@ -670,10 +684,13 @@ type composeYAMLVars struct {
 	NoProjectMount            bool
 	Hostnames                 []string
 	Timezone                  string
+	ComposerVersion           string
 	Username                  string
 	UID                       string
 	GID                       string
 	AutoRestartContainers     bool
+	FailOnHookFail            bool
+	WebEnvironment            []string
 }
 
 // RenderComposeYAML renders the contents of .ddev/.ddev-docker-compose*.
@@ -693,9 +710,17 @@ func (app *DdevApp) RenderComposeYAML() (string, error) {
 	if err != nil {
 		util.Warning("Could not determine host.docker.internal IP address: %v", err)
 	}
-
 	// The fallthrough default for hostDockerInternalIdentifier is the
 	// hostDockerInternalHostname == host.docker.internal
+
+	webEnvironment := globalconfig.DdevGlobalConfig.WebEnvironment
+	localWebEnvironment := app.WebEnvironment
+	for _, v := range localWebEnvironment {
+		// docker-compose won't accept a duplicate environment value
+		if !nodeps.ArrayContainsString(webEnvironment, v) {
+			webEnvironment = append(webEnvironment, v)
+		}
+	}
 
 	uid, gid, username := util.GetContainerUIDGid()
 
@@ -721,6 +746,7 @@ func (app *DdevApp) RenderComposeYAML() (string, error) {
 		WebMount:                  "../",
 		Hostnames:                 app.GetHostnames(),
 		Timezone:                  app.Timezone,
+		ComposerVersion:           app.ComposerVersion,
 		Username:                  username,
 		UID:                       uid,
 		GID:                       gid,
@@ -729,6 +755,8 @@ func (app *DdevApp) RenderComposeYAML() (string, error) {
 		WebBuildDockerfile:        app.GetConfigPath(".webimageBuild/Dockerfile"),
 		DBBuildDockerfile:         app.GetConfigPath(".dbimageBuild/Dockerfile"),
 		AutoRestartContainers:     globalconfig.DdevGlobalConfig.AutoRestartContainers,
+		FailOnHookFail:            app.FailOnHookFail || app.FailOnHookFailGlobal,
+		WebEnvironment:            webEnvironment,
 	}
 	if app.NFSMountEnabled || app.NFSMountEnabledGlobal {
 		templateVars.MountType = "volume"
@@ -760,19 +788,19 @@ func (app *DdevApp) RenderComposeYAML() (string, error) {
 		return "", err
 	}
 
-	err = WriteBuildDockerfile(app.GetConfigPath(".webimageBuild/Dockerfile"), app.GetConfigPath("web-build/Dockerfile"), app.WebImageExtraPackages)
+	err = WriteBuildDockerfile(app.GetConfigPath(".webimageBuild/Dockerfile"), app.GetConfigPath("web-build/Dockerfile"), app.WebImageExtraPackages, app.ComposerVersion)
 	if err != nil {
 		return "", err
 	}
 
-	err = WriteBuildDockerfile(app.GetConfigPath(".dbimageBuild/Dockerfile"), app.GetConfigPath("db-build/Dockerfile"), app.DBImageExtraPackages)
+	err = WriteBuildDockerfile(app.GetConfigPath(".dbimageBuild/Dockerfile"), app.GetConfigPath("db-build/Dockerfile"), app.DBImageExtraPackages, "")
 
 	if err != nil {
 		return "", err
 	}
 
 	// SSH agent just needs extra to add the official related user, nothing else
-	err = WriteBuildDockerfile(app.GetConfigPath(".sshimageBuild/Dockerfile"), "", nil)
+	err = WriteBuildDockerfile(app.GetConfigPath(".sshimageBuild/Dockerfile"), "", nil, "")
 	if err != nil {
 		return "", err
 	}
@@ -789,7 +817,7 @@ func (app *DdevApp) RenderComposeYAML() (string, error) {
 // WriteBuildDockerfile writes a Dockerfile to be used in the
 // docker-compose 'build'
 // It may include the contents of .ddev/<container>-build
-func WriteBuildDockerfile(fullpath string, userDockerfile string, extraPackages []string) error {
+func WriteBuildDockerfile(fullpath string, userDockerfile string, extraPackages []string, composerVersion string) error {
 	// Start with user-built dockerfile if there is one.
 	err := os.MkdirAll(filepath.Dir(fullpath), 0755)
 	if err != nil {
@@ -817,6 +845,27 @@ RUN (groupadd --gid $gid "$username" || groupadd "$username" || true) && (userad
 	if extraPackages != nil {
 		contents = contents + `
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y -o Dpkg::Options::="--force-confold" --no-install-recommends --no-install-suggests ` + strings.Join(extraPackages, " ") + "\n"
+	}
+	// If composerVersion is set, and composer is in the container,
+	// run composer self-update to the version (or --1 or --2)
+	var composerSelfUpdateArg string
+	switch composerVersion {
+	case "1":
+		composerSelfUpdateArg = "--1"
+	case "2":
+		composerSelfUpdateArg = "--2"
+	default:
+		composerSelfUpdateArg = composerVersion
+	}
+
+	// If composerVersion is not set, we don't need to self-update.
+	// Currently by default it will be composer v1 because of upstream setting
+	// Try composer self-update twice because of troubles with composer downloads
+	// breaking testing.
+	if composerVersion != "" {
+		contents = contents + fmt.Sprintf(`
+RUN if command -v composer >/dev/null 2>&1 ; then export XDEBUG_MODE=off && (composer self-update %s || composer self-update %s ) && chmod 777 /usr/local/bin/composer;  fi
+`, composerSelfUpdateArg, composerSelfUpdateArg)
 	}
 	return WriteImageDockerfile(fullpath, []byte(contents))
 }

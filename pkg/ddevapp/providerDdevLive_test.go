@@ -33,6 +33,7 @@ func TestDdevLiveConfigCommand(t *testing.T) {
 	if os.Getenv("DDEV_DDEVLIVE_API_TOKEN") == "" {
 		t.Skipf("No DDEV_DDEVLIVE_API_TOKEN env var has been set. Skipping %v", t.Name())
 	}
+	_ = os.Setenv("DDEV_LIVE_NO_ANALYTICS", "true")
 
 	// Set up tests and give ourselves a working directory.
 	assert := asrt.New(t)
@@ -97,6 +98,7 @@ func TestDdevLivePull(t *testing.T) {
 	if os.Getenv("DDEV_DDEVLIVE_API_TOKEN") == "" {
 		t.Skipf("No DDEV_DDEVLIVE_API_TOKEN env var has been set. Skipping %v", t.Name())
 	}
+	_ = os.Setenv("DDEV_LIVE_NO_ANALYTICS", "true")
 
 	// Set up tests and give ourselves a working directory.
 	assert := asrt.New(t)
@@ -118,7 +120,7 @@ func TestDdevLivePull(t *testing.T) {
 	// nolint: errcheck
 	defer app.Stop(true, false)
 
-	app.Name = ddevliveTestSite
+	app.Name = t.Name()
 	app.Type = nodeps.AppTypeDrupal8
 	app.Docroot = "web"
 	_ = os.MkdirAll(filepath.Join(app.AppRoot, app.Docroot, "sites/default/files"), 0755)

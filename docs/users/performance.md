@@ -1,6 +1,14 @@
 ## Performance
 
-Every developer wants both quick starts of the environment and quick response to web page requests. DDEV-Local is always focused on improving this. However, both Docker Desktop for Windows and Docker Desktop for Mac have significant performance problems with mounted filesystems (like the mounted project where code can be edited either inside the container or on the host).
+Every developer wants both fast startup of the environment and quick response to web page requests. DDEV-Local is always focused on improving this. However, both Docker Desktop for Windows and Docker Desktop for Mac have significant performance problems with mounted filesystems (like the mounted project where code can be edited either inside the container or on the host).
+
+## Freeing Up System Resources
+
+Every project you run uses system resources, and may compete for those resources. A reasonable practice is to stop projects that aren't currently in use, or stop all projects with `ddev poweroff` and then start the one that you're actually working on. `ddev list` will show you the projects you're working on.
+
+## Docker Desktop for Mac Settings
+
+Docker Desktop for Mac has a number of settings that you'll want to pay attention to. Under "Advanced" in the "Resources" section in "Preferences", you can adjust the amount of memory, disk, and CPUs allocated to Docker. While the defaults work well for a small project or two, you may want to adjust these upward based on your experience. The default memory allocation is 2GB, but many people raise it to 4-5GB or even higher. The disk allocation almost always needs to be raised to accommodate increased downloaded images. Your experience will determine what to do with CPUs.
 
 ## Using NFS to Mount the Project into the Web Container
 
@@ -24,8 +32,8 @@ __macOS Catalina (and above) warning:__ If the projects are in a subdirectory of
 
 Download, inspect, make executable, and run the [macos_ddev_nfs_setup.sh](https://raw.githubusercontent.com/drud/ddev/master/scripts/macos_ddev_nfs_setup.sh) script. Use `curl -O https://raw.githubusercontent.com/drud/ddev/master/scripts/macos_ddev_nfs_setup.sh && chmod +x macos_ddev_nfs_setup.sh && ./macos_ddev_nfs_setup.sh`. This stops running ddev projects, adds your home directory to the /etc/exports config file that nfsd uses, and enables nfsd to run on your computer. This is a one-time setup. Note that this shares your home directory via NFS to any NFS client on your computer, so it's critical to consider security issues; It's easy to make the shares in /etc/exports more limited as well, as long as they don't overlap (NFS doesn't allow overlapping exports).
 
-If your DDEV-Local projects are set up outside your home directory, you'll need to edit /etc/exports for to add a line for that share as well.
-`sudo vi /etc/exports` and add copy the line the script has just created (`/System/Volumes/Data/Users/username -alldirs -mapall=<your_user_id>:20 localhost`), editing it with the additional path, e.g: `/Volumes/SomeExternalDrive -alldirs -mapall=<your_uid>:20 localhost`.
+If your DDEV-Local projects are set up outside your home directory, you'll need to edit /etc/exports to add a line for that share as well.
+`sudo vi /etc/exports` and copy the line the script has just created (`/System/Volumes/Data/Users/username -alldirs -mapall=<your_user_id>:20 localhost`), editing it with the additional path, e.g: `/Volumes/SomeExternalDrive -alldirs -mapall=<your_uid>:20 localhost`.
 
 ### Windows NFS Setup
 
@@ -37,7 +45,7 @@ Also see the debugging section below, and the special Windows debugging section.
 
 ### Debian/Ubuntu Linux NFS Setup
 
-The nfsmount_enabled feature does not really add performance on Linux systems because Docker on Linux is already quite fast. The primary reason for using it on a Linux system would be just to keep consistent with other team members working on other host OSs. However, since one can now set up NFS globally with `ddev config global --nfs-mount-enabled` it no longer needs to be set up on a project-by-project basis, so most teams can get by with just leaving NFS mounting out of the project-level config.yaml.
+The nfs_mount_enabled feature does not really add performance on Linux systems because Docker on Linux is already quite fast. The primary reason for using it on a Linux system would be just to keep consistent with other team members working on other host OSs. However, since one can now set up NFS globally with `ddev config global --nfs-mount-enabled` it no longer needs to be set up on a project-by-project basis, so most teams can get by with just leaving NFS mounting out of the project-level config.yaml.
 
 Note that for all Linux systems, you can and should install and configure the NFS daemon and configure /etc/exports as you see fit and share the directories that you choose to share. The Debian/Ubuntu Linux script is just one way of accomplishing it.
 
@@ -91,11 +99,9 @@ You should then see nfsd in the list as shown:
 * Restart nfsd with `sudo nfsd restart`
 * Add the following to your /etc/nfs.conf:
 
-  ```conf
-
+```conf
 nfs.server.mount.require_resv_port = 0
 nfs.server.verbose = 3
-
 ```
 
 * Run Console.app and put "nfsd" in the search box at the top. `sudo nfsd restart` and read the messages carefully. Attempt to `ddev debug nfsmount` the problematic project directory.

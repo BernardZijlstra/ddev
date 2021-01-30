@@ -2,18 +2,13 @@ package version
 
 import (
 	"fmt"
+	"github.com/drud/ddev/pkg/globalconfig"
 	"github.com/drud/ddev/pkg/nodeps"
 	"github.com/fsouza/go-dockerclient"
 	"os/exec"
 	"runtime"
 	"strings"
 )
-
-// MariaDBDefaultVersion is the default version we use in the db container
-const MariaDBDefaultVersion = "10.2"
-
-// VERSION is supplied with the git committish this is built from
-var VERSION = ""
 
 // IMPORTANT: These versions are overridden by version ldflags specifications VERSION_VARIABLES in the Makefile
 
@@ -22,7 +17,7 @@ var DdevVersion = "v0.0.0-overridden-by-make" // Note that this is overridden by
 
 // SegmentKey is the ddev-specific key for Segment service
 // Compiled with link-time variables
-var SegmentKey = "CawBO33fRNynkaZsfgjY8sTxDT3yrH9c"
+var SegmentKey = ""
 
 // DockerVersionConstraint is the current minimum version of docker required for ddev.
 // See https://godoc.org/github.com/Masterminds/semver#hdr-Checking_Version_Constraints
@@ -45,13 +40,13 @@ var DockerComposeFileFormatVersion = "3.6"
 var WebImg = "drud/ddev-webserver"
 
 // WebTag defines the default web image tag for drud dev
-var WebTag = "v1.16.0-alpha5" // Note that this can be overridden by make
+var WebTag = "20210126_php8_extensions" // Note that this can be overridden by make
 
 // DBImg defines the default db image used for applications.
 var DBImg = "drud/ddev-dbserver"
 
 // BaseDBTag is the main tag, DBTag is constructed from it
-var BaseDBTag = "v1.16.0-alpha5"
+var BaseDBTag = "switch-to-github-actions"
 
 // DBAImg defines the default phpmyadmin image tag used for applications.
 var DBAImg = "phpmyadmin"
@@ -63,14 +58,11 @@ var DBATag = "5" // Note that this can be overridden by make
 var RouterImage = "drud/ddev-router"
 
 // RouterTag defines the tag used for the router.
-var RouterTag = "v1.16.0-alpha5" // Note that this can be overridden by make
+var RouterTag = "20210106_nginx_default_server" // Note that this can be overridden by make
 
 var SSHAuthImage = "drud/ddev-ssh-agent"
 
-var SSHAuthTag = "v1.16.0-alpha5"
-
-// COMMIT is the actual committish, supplied by make
-var COMMIT = "COMMIT should be overridden"
+var SSHAuthTag = "v1.16.0"
 
 // BUILDINFO is information with date and context, supplied by make
 var BUILDINFO = "BUILDINFO should have new info"
@@ -92,7 +84,6 @@ func GetVersionInfo() map[string]string {
 	versionInfo["dba"] = GetDBAImage()
 	versionInfo["router"] = RouterImage + ":" + RouterTag
 	versionInfo["ddev-ssh-agent"] = SSHAuthImage + ":" + SSHAuthTag
-	versionInfo["commit"] = COMMIT
 	versionInfo["build info"] = BUILDINFO
 	versionInfo["os"] = runtime.GOOS
 	if versionInfo["docker"], err = GetDockerVersion(); err != nil {
@@ -110,12 +101,16 @@ func GetVersionInfo() map[string]string {
 
 // GetWebImage returns the correctly formatted web image:tag reference
 func GetWebImage() string {
-	return fmt.Sprintf("%s:%s", WebImg, WebTag)
+	fullWebImg := WebImg
+	if globalconfig.DdevGlobalConfig.UseHardenedImages {
+		fullWebImg = fullWebImg + "-prod"
+	}
+	return fmt.Sprintf("%s:%s", fullWebImg, WebTag)
 }
 
 // GetDBImage returns the correctly formatted db image:tag reference
 func GetDBImage(dbType string, dbVersion ...string) string {
-	v := MariaDBDefaultVersion
+	v := nodeps.MariaDBDefaultVersion
 	if len(dbVersion) > 0 {
 		v = dbVersion[0]
 	}

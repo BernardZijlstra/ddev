@@ -29,7 +29,7 @@ func (n *SegmentNoopLogger) Errorf(format string, args ...interface{}) {}
 
 // ReportableEvents is the list of events that we choose to report specifically.
 // Excludes non-ddev custom commands.
-var ReportableEvents = map[string]bool{"auth": true, "composer": true, "config": true, "debug": true, "delete": true, "describe": true, "exec": true, "export-db": true, "import-db": true, "import-files": true, "launch": true, "list": true, "logs": true, "mysql": true, "pause": true, "poweroff": true, "pull": true, "restart": true, "restore-snapshot": true, "sequelace": true, "sequelpro": true, "share": true, "snapshot": true, "ssh": true, "start": true, "stop": true, "tableplus": true, "xdebug": true}
+var ReportableEvents = map[string]bool{"auth": true, "composer": true, "config": true, "debug": true, "delete": true, "describe": true, "exec": true, "export-db": true, "heidisql": true, "import-db": true, "import-files": true, "launch": true, "list": true, "logs": true, "mysql": true, "pause": true, "poweroff": true, "pull": true, "restart": true, "restore-snapshot": true, "sequelace": true, "sequelpro": true, "share": true, "snapshot": true, "ssh": true, "start": true, "stop": true, "tableplus": true, "xdebug": true}
 
 // GetInstrumentationUser normally gets just the hashed hostID but if
 // an explicit user is provided in global_config.yaml that will be prepended.
@@ -57,7 +57,7 @@ func SetInstrumentationBaseTags() {
 		}
 		nodeps.InstrumentationTags["dockerVersion"] = dockerVersion
 		nodeps.InstrumentationTags["dockerToolbox"] = strconv.FormatBool(false)
-		nodeps.InstrumentationTags["version"] = version.VERSION
+		nodeps.InstrumentationTags["version"] = version.DdevVersion
 		nodeps.InstrumentationTags["ServerHash"] = GetInstrumentationUser()
 		nodeps.InstrumentationTags["timezone"] = timezone
 		nodeps.InstrumentationTags["language"] = lang
@@ -97,7 +97,7 @@ func SegmentUser(client analytics.Client, hashedID string) error {
 	lang := os.Getenv("LANG")
 	err := client.Enqueue(analytics.Identify{
 		UserId:  hashedID,
-		Context: &analytics.Context{App: analytics.AppInfo{Name: "ddev", Version: version.VERSION}, OS: analytics.OSInfo{Name: runtime.GOOS}, Locale: lang, Timezone: timezone},
+		Context: &analytics.Context{App: analytics.AppInfo{Name: "ddev", Version: version.DdevVersion}, OS: analytics.OSInfo{Name: runtime.GOOS}, Locale: lang, Timezone: timezone},
 		Traits:  analytics.Traits{"instrumentation_user": globalconfig.DdevGlobalConfig.InstrumentationUser},
 	})
 
@@ -126,7 +126,7 @@ func SegmentEvent(client analytics.Client, hashedID string, event string) error 
 		UserId:     hashedID,
 		Event:      event,
 		Properties: properties,
-		Context:    &analytics.Context{App: analytics.AppInfo{Name: "ddev", Version: version.VERSION}, OS: analytics.OSInfo{Name: runtime.GOOS}, Locale: lang, Timezone: timezone},
+		Context:    &analytics.Context{App: analytics.AppInfo{Name: "ddev", Version: version.DdevVersion}, OS: analytics.OSInfo{Name: runtime.GOOS}, Locale: lang, Timezone: timezone},
 	})
 
 	return err

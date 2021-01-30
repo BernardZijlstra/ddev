@@ -11,13 +11,14 @@ Each of these commands has full help. For example, `ddev start -h` or `ddev help
 * `ddev describe` or `ddev describe <projectname>` gives you full details about the project, what ports it uses, how to access them, etc.
 * `ddev list` shows running projects
 * `ddev mysql` gives direct access to the mysql client
-* `ddev sequelpro` or `ddev sequelace` (macOS only, if installed) give access to the Sequel Pro or Sequel Ace database browser GUIs (if installed)
+* `ddev sequelpro`, `ddev sequelace`, and `ddev tableplus` (macOS only, if the app is installed) give access to the Sequel Pro, Sequel Ace, or TablePlus database browser GUIs.
+* `ddev heidisql` (Windows/WSL2 only, if installed) gives access to the HeidiSQL database browser GUI.
 * `ddev import-db` and `ddev export-db` let you import or export a sql or compressed sql file.
 * `ddev composer` lets you run composer (inside the container), for example `ddev composer install` will do a full composer install for you without even needing composer on your computer. See [developer tools](developer-tools.md#ddev-and-composer).
 * `ddev snapshot` makes a very fast snapshot of your database that can be easily and quickly restored with `ddev restore-snapshot`.
 * `ddev share` works with [ngrok](https://ngrok.com/) (and requires ngrok) so you can let someone in the next office or on the other side of the planet see your project and what you're working on. `ddev share -h` gives more info about how to set up ngrok (it's easy).
 * `ddev ssh` opens a bash session in the web container (or other container).
-* `ddev launch` or `ddev launch some/uri` will launch a browser with the current project's URL (or a full URL to `/some/uri`). `ddev launch -p` will launch the PHPMyAdmin UI, and `ddev launch -m` will launch the MailHog UI.
+* `ddev launch` or `ddev launch some/uri` will launch a browser with the current project's URL (or a full URL to `/some/uri`). `ddev launch -p` will launch the phpMyAdmin UI, and `ddev launch -m` will launch the MailHog UI.
 * `ddev delete` is the same as `ddev stop --remove-data` and will delete a project's database and ddev's record of the project's existence. It doesn't touch your project or code. `ddev delete -O` will omit the snapshot creation step that would otherwise take place, and `ddev delete images` gets rid of spare Docker images you may have on your machine.
 * `ddev xdebug` enables xdebug, `ddev xdebug off` disables it, `ddev xdebug status` shows status
 * `ddev drush` (Drupal and Backdrop only) gives direct access to the drush CLI
@@ -28,15 +29,15 @@ Each of these commands has full help. For example, `ddev start -h` or `ddev help
 
 In addition to the *commands* listed above, there are loads and loads of tools included inside the containers:
 
-* `ddev describe` tells how to access **mailhog**, which captures email in your development environment.
-* `ddev describe` tells how to use the built-in **PHPMyAdmin** and `ddev launch -p` gives direct access to it.
+* `ddev describe` tells how to access **MailHog**, which captures email in your development environment.
+* `ddev describe` tells how to use the built-in **phpMyAdmin** and `ddev launch -p` gives direct access to it.
 * Composer, git, node, npm, and dozens of other tools are installed in the web container, and you can access them via `ddev ssh` or `ddev exec`.
 * `ddev logs` gets you webserver logs; `ddev logs -s db` gets dbserver logs.
 * sqlite3 and the mysql client are inside the web container (and mysql client is also in the db container).
 
 ## Quickstart Guides
 
-Here are quickstart instructions for generic PHP, WordPress, Drupal 6, Drupal 7, Drupal 8, TYPO3, Backdrop, Magento, Magento 2, and Laravel.
+Here are quickstart instructions for generic PHP, WordPress, Drupal 6, Drupal 7, Drupal 8, TYPO3, Backdrop, Magento, Magento 2, Laravel, and Shopware 6.
 
 **Prerequisites:** Before you start, follow the [installation instructions](../index.md#installation). Make sure to [check the system requirements](../index.md#system-requirements), you will need *docker* and *docker-compose* to use ddev.
 
@@ -78,6 +79,8 @@ Now, since [Bedrock](https://roots.io/bedrock/) uses a configuration technique w
     DB_PASSWORD=db
     DB_HOST=db
     WP_HOME=https://my-wp-bedrock-site.ddev.site
+    WP_SITEURL=${WP_HOME}/wp
+    WP_ENV=development
 ```
 
 You can then `ddev start` and `ddev launch`.
@@ -190,7 +193,7 @@ ddev start
 ddev launch /install.php
 ```
 
-(Drupal 7 doesn't know how to redirect from the front page to the /install.php if the database is not set up but the settings files *are* set up, so launching with /install.php gets you started with an installation. You can aso `drush site-install`, `ddev exec drush site-install --yes`)
+(Drupal 7 doesn't know how to redirect from the front page to the /install.php if the database is not set up but the settings files *are* set up, so launching with /install.php gets you started with an installation. You can also `drush site-install`, `ddev exec drush site-install --yes`)
 
 Quickstart instructions for database imports can be found under [Database Imports](#database-imports).
 
@@ -203,7 +206,7 @@ mkdir my-typo3-site
 cd my-typo3-site
 ddev config --project-type=typo3 --docroot=public --create-docroot
 ddev start
-ddev composer create "typo3/cms-base-distribution:^10" --prefer-dist
+ddev composer create "typo3/cms-base-distribution:^11"
 ddev exec touch public/FIRST_INSTALL
 ddev launch
 ```
@@ -253,23 +256,28 @@ Note that OpenMage is a huge codebase and using `nfs_mount_enabled: true` is rec
 
 ### Magento 2 Quickstart
 
-Normal details of a composer build for Magento 2 are on [Magento 2 site](https://devdocs.magento.com/guides/v2.3/install-gde/composer.html) You must have a public and private key to install from Magento's repository; when prompted for "username" and "password" in the composer create it's asking for your public and private keys.
+Normal details of a composer build for Magento 2 are on [Magento 2 site](https://devdocs.magento.com/guides/v2.4/install-gde/composer.html) You must have a public and private key to install from Magento's repository; when prompted for "username" and "password" in the composer create it's asking for your public and private keys.
 
 ```bash
 mkdir ddev-magento2 && cd ddev-magento2
 ddev config --project-type=magento2 --docroot=pub --create-docroot
+```
+
+Copy [docker-compose.elasticsearch.yaml](https://github.com/drud/ddev-contrib/blob/master/docker-compose-services/elasticsearch/docker-compose.elasticsearch.yaml) to local `.ddev` directory.
+
+```bash
 ddev start
 ddev composer create --repository=https://repo.magento.com/ magento/project-community-edition
 ddev ssh
-bin/magento setup:install  --db-host=db --db-name=db --db-user=db --db-password=db  --admin-firstname=Magento --admin-lastname=User --admin-email=user@example.com  --admin-user=admin --admin-password=admin123 --language=en_US
-bin/magento setup:store-config:set --base-url="https://ddev-magento2.ddev.site/"
-bin/magento cache:clean
+bin/magento setup:install --base-url=https://ddev-magento2.ddev.site/ --db-host=db --db-name=db --db-user=db --db-password=db --elasticsearch-host=elasticsearch --admin-firstname=Magento --admin-lastname=User --admin-email=user@example.com --admin-user=admin --admin-password=admin123 --language=en_US
 bin/magento deploy:mode:set developer
+bin/magento module:disable Magento_TwoFactorAuth
+bin/magento cache:flush
 ```
 
 Of course, change the admin name and related information is needed. The project name here is derived from the directory name (ddev-magento2 in this example). Your project name (and thus the `setup:store-config:set --base-url`) will almost certainly be different.
 
-You may want to add the [Magento 2 Sample Data](https://devdocs.magento.com/guides/v2.3/install-gde/install/sample-data-after-composer.html).
+You may want to add the [Magento 2 Sample Data](https://devdocs.magento.com/guides/v2.4/install-gde/install/sample-data-after-composer.html).
 
 Note that Magento 2 is a huge codebase and using `nfs_mount_enabled: true` is recommended for performance on macOS and Windows, see [docs](performance/#using-nfs-to-mount-the-project-into-the-container).
 
@@ -348,6 +356,33 @@ return [
 This way we only need to change the value of `DB_CONNECTION` to `ddev` in the `.env` to work with the `db` service.
 This is very handy if you have a local database installed and you want to switch between the connections faster by changing only one variable in `.env`
 
+### Shopware 6 Quickstart
+
+You can set up a Shopware 6 environment many ways, but this shows you one recommended technique:
+
+```bash
+git clone --branch=6.2 https://github.com/shopware/production my-shopware6
+cd my-shopware6
+ddev config --project-type=shopware6 --docroot=public
+ddev start
+ddev composer install
+ddev exec bin/console system:setup
+# In system:startup use
+# URL https://<project.ddev.site>, here https://my-shopware6.ddev.site
+# Database User: db
+# Database Password: db
+# Database Host: db
+# Database Port: (default)
+# Database Name: db
+ddev exec bin/console system:install --create-database --basic-setup
+ddev start
+ddev launch /admin
+```
+
+Now log into the admin site (/admin) using the web browser. The default credentials are username=admin, password=shopware. You can use the web UI to install sample data or accomplish many other tasks.
+
+For more advanced tasks like adding elasticsearch, building and watching storefront and administration, see [susi.dev](https://susi.dev/ddev-shopware-6).
+
 ### Database Imports
 
 Import a database with just one command; We offer support for several file formats, including: **.sql, sql.gz, mysql, mysql.gz, tar, tar.gz, and zip**.
@@ -358,7 +393,7 @@ Here's an example of a database import using ddev:
 ddev import-db --src=dumpfile.sql.gz
 ```
 
-It is also possible to use PHPMyAdmin for database imports, but that approach is much slower. Also, the web and db containers container the `mysql` client, which can be used for imports, and the `ddev mysql` command can be used in the same way you might use `mysql` on a server.
+It is also possible to use phpMyAdmin for database imports, but that approach is much slower. Also, the web and db containers container the `mysql` client, which can be used for imports, and the `ddev mysql` command can be used in the same way you might use `mysql` on a server.
 
 **Note for Backdrop users:** In addition to importing a Backdrop database, you will need to extract a copy of your Backdrop project's configuration into the local `active` directory. The location for this directory can vary depending on the contents of your Backdrop `settings.php` file, but the default location is `[docroot]/files/config_[random letters and numbers]/active`. Please refer to the Backdrop documentation for more information on [moving your Backdrop site](https://backdropcms.org/user-guide/moving-backdrop-site) into the `ddev` environment.
 
@@ -385,7 +420,7 @@ And you can now visit your working project by URL or just give the command `ddev
 
 ### Configuration files
 
-_**Note:** If you're providing the settings.php or wp-config.php and DDEV is creating the settings.ddev.php (or wp-config-local.php, AdditionalConfig.php, or similar), the main settings file must explicitly include the appropriate DDEV-generated settings file._
+_**Note:** If you're providing the settings.php or wp-config.php and DDEV is creating the settings.ddev.php (or wp-config-local.php, AdditionalConfig.php, or similar), the main settings file must explicitly include the appropriate DDEV-generated settings file.  Any changes you need should be included somewhere that loads after DDEV's settings file, for example in Drupal's settings.php *after* settings.ddev.php is included. (see "Adding Configuration" below)._
 
 _**Note:** If you do *not* want DDEV-Local to create or manage settings files, set `disable_settings_management: true` in your .ddev/config.yaml or `ddev config --disable-settings-management` and you will be the only one that edits or updates settings files._
 
@@ -403,14 +438,14 @@ In **Magento 2**, DDEV settings go into `app/etc/env.php`
 
 For **TYPO3**, DDEV settings are written to AdditionalConfiguration.php.  If AdditionalConfiguration.php exists and is not managed by DDEV, it will not be modified.
 
-For **Wordpress**, DDEV settings are written to a DDEV-managed file, wp-config-ddev.php. The `ddev config` command will attempt to write settings through the following steps:
+For **WordPress**, DDEV settings are written to a DDEV-managed file, wp-config-ddev.php. The `ddev config` command will attempt to write settings through the following steps:
 
 * Write DDEV settings to wp-config-ddev.php
 * If no wp-config.php exists, create one that include wp-config-ddev.php
 * If a DDEV-managed wp-config.php exists, create one that includes wp-config.php
 * If a user-managed wp-config.php exists, instruct the user on how to modify it to include DDEV settings
 
-How do you know if DDEV manages a settings file? You will see the following comment. Remove the comment and DDEV will not attempt to overwrite it!
+How do you know if DDEV manages a settings file? You will see the following comment. Remove the comment and DDEV will not attempt to overwrite it!  If you are letting DDEV create its settings file, it is recommended that you leave this comment so DDEV can continue to manage it, and make any needed changes in another settings file.
 
 ```
 
@@ -420,6 +455,12 @@ How do you know if DDEV manages a settings file? You will see the following comm
  */
 
 ```
+
+#### Adding configuration
+
+__Drupal and Backdrop__:  In settings.php, enable loading settings.local.php after settings.ddev.php is included (create a new one if it doesn't already exist), and make changes there (wrapping with `if (getenv('IS_DDEV_PROJECT') == 'true')` as needed).
+
+__WordPress__:  Load a wp-config-local.php after wp-config-ddev.php, and make changes there (wrapping with `if (getenv('IS_DDEV_PROJECT') == 'true')` as needed).
 
 ## Listing project information
 
@@ -452,8 +493,8 @@ d8composer  drupal8  ~/workspace/d8composer  https://d8composer.ddev.site  runni
 
 Project Information
 -------------------
-PHP version:    7.3
-MariaDB version 10.2
+PHP version:    7.4
+MariaDB version 10.3
 
 URLs
 ----
@@ -513,7 +554,7 @@ Importing database...
 Successfully imported database for drupal8
 ```
 
-<h4>Supported file types</h4>
+#### Supported file types
 
 Database import supports the following file types:
 
@@ -540,7 +581,7 @@ Successfully imported database for drupal8
 
 ```
 
-<h4>Non-interactive usage</h4>
+#### Non-interactive usage
 
 If you want to use import-db without answering prompts, you can use the `--src` flag to provide the path to the import asset. If you are importing an archive, and wish to specify the path within the archive to extract, you can use the `--extract-path` flag in conjunction with the `--src` flag. Examples:
 
@@ -550,7 +591,7 @@ gzip -dc /tmp/mydb.sql.gz | ddev import-db
 ddev import-db <mydb.sql
 ```
 
-<h4>Database import notes</h4>
+#### Database import notes
 
 * Importing from a dumpfile via stdin will not show progress because there's no way the import can know how far along through the import it has progressed.
 * Use `ddev import-db --target-db <some_database>` to import to a non-default database (other than the default "db" database). This will create the database if it doesn't exist already.
@@ -586,7 +627,7 @@ Import path:
 Successfully imported files for drupal8
 ```
 
-<h4>Supported file types</h4>
+#### Supported archive types for file import
 
 Static asset import supports the following file types:
 
@@ -608,7 +649,8 @@ Successfully imported files for drupal8
 
 ```
 
-<h4>Non-interactive usage</h4>
+#### Non-interactive usage for ddev import-files
+
 If you want to use import-files without answering prompts, you can use the `--src` flag to provide the path to the import asset. If you are importing an archive, and wish to specify the path within the archive to extract, you can use the `--extract-path` flag in conjunction with the `--src` flag. Example:
 
 `ddev import-files --src=/tmp/files.tgz`
@@ -623,11 +665,21 @@ Creating database snapshot d8git_20180801132403
 Created database snapshot d8git_20180801132403 in /Users/rfay/workspace/d8git/.ddev/db_snapshots/d8git_20180801132403
 Created snapshot d8git_20180801132403
 
-ddev restore-snapshot d8git_20180801132403
+ddev snapshot restore d8git_20180801132403
 Restored database snapshot: /Users/rfay/workspace/d8git/.ddev/db_snapshots/d8git_20180801132403
 ```
 
-Snapshots are stored in the project's .ddev/db_snapshots directory, and the directory can be renamed as necessary. For example, if you rename the above d8git_20180801132403 directory to "working_before_migration", then you can use `ddev restore-snapshot working_before_migration`.
+Snapshots are stored in the project's .ddev/db_snapshots directory, and the directory can be renamed as necessary. For example, if you rename the above d8git_20180801132403 directory to "working_before_migration", then you can use `ddev snapshot restore working_before_migration`.
+To restore the latest snapshot add the `--latest` flag (`ddev snapshot restore --latest`).
+
+To delete a snapshot, delete its folder from the .ddev/db_snapshots directory. Snapshots are not removed from the filesystem by `ddev delete`. It is safe to remove all the snapshots with `rm -r .ddev/db_snapshots` if you no longer need the snapshots.
+
+All snapshots of a project can be removed with `ddev snapshot --cleanup`. A single snapshot can be removed by `ddev snapshot --cleanup --name <snapshot-name>`.
+
+To see all existing snapshots of a project use `ddev snapshot --list`.
+All existing snapshots of your system can be listed by adding the `--all` option to the command (`ddev snapshot --list --all`).
+
+There are some interesting consequences of restoring huge multi-gigabyte databases. Ddev may show the project as ready and started when in reality tables are still being loaded. You can see this behavior with `ddev logs -s db -f`.
 
 ## Interacting with your project
 
@@ -686,11 +738,11 @@ DDEV-Local attempts to make offline use work as well as possible, and you really
 
 However, it does not (yet) attempt to prevent docker pulls if a new docker image is required, so you'll want to make sure that you try a `ddev start` before going offline to make sure everything has been pulled.
 
-If youy have a project running when you're online (using DNS for name resolution) and you then go offline, you'll want to do a `ddev restart` to get the hostname added into /etc/hosts for name resolution.
+If you have a project running when you're online (using DNS for name resolution) and you then go offline, you'll want to do a `ddev restart` to get the hostname added into /etc/hosts for name resolution.
 
 You have general options as well:
 
 In `.ddev/config.yaml` `use_dns_when_possible: false` will make ddev never try to use DNS for resolution, instead adding hostnames to /etc/hosts. You can also use `ddev config --use-dns-when-possible=false` to set this configuration option.
 In `.ddev/config.yaml` `project_tld: example.com` (or any other domain) can set ddev to use a project that could never be looked up in DNS. You can also use `ddev config --project-tld=example.com`
 
-You can slso set up a local DNS server like dnsmasq (Linux and macOS, `brew install dnsmasq`) or ([unbound](https://github.com/NLnetLabs/unbound) or many others on Windows) in your own host environment that serves the project_tld that you choose, and DNS resolution will work just fine. You'll likely want a wildcard A record pointing to 127.0.0.1 (on most ddev installations). If you use dnsmasq you must configure it to allow DNS rebinding.
+You can also set up a local DNS server like dnsmasq (Linux and macOS, `brew install dnsmasq`) or ([unbound](https://github.com/NLnetLabs/unbound) or many others on Windows) in your own host environment that serves the project_tld that you choose, and DNS resolution will work just fine. You'll likely want a wildcard A record pointing to 127.0.0.1 (on most ddev installations). If you use dnsmasq you must configure it to allow DNS rebinding.
